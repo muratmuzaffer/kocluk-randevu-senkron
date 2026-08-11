@@ -22,6 +22,13 @@
   letter-spacing: -0.02em;
 }
 
+.saved-note {
+  margin: 0.4rem 0 0;
+  font-size: 0.88rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .pickers {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -184,9 +191,63 @@
   background: #eef3ea;
   color: var(--ink);
   font-weight: 650;
-  position: sticky;
-  top: 0;
-  z-index: 1;
+}
+
+.class-sheet {
+  margin-bottom: 0.35rem;
+}
+
+.class-sheet .class-banner {
+  color: #fff !important;
+  text-align: left;
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+}
+
+.class-sheet .class-banner span {
+  float: right;
+  opacity: 0.9;
+  font-weight: 600;
+}
+
+.class-boards {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.class-board {
+  border: 1px solid var(--c-border, var(--grid));
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--c-bg, #fff);
+}
+
+.class-board > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0.75rem;
+  background: var(--c-head, var(--accent));
+  color: #fff;
+}
+
+.class-board > header h3 {
+  color: #fff;
+  font-size: 1rem;
+}
+
+.class-board > header span {
+  font-size: 0.82rem;
+  opacity: 0.92;
+}
+
+.class-board .timeline {
+  padding: 0.55rem;
+}
+
+.class-board .tl {
+  background: #fff;
+  border-left-color: var(--c-head, var(--accent));
 }
 
 .x-table td {

@@ -3,15 +3,20 @@ import * as XLSX from 'xlsx'
 import { cleanText } from './names'
 
 export const DAY_ORDER = [
-  'Cumartesi',
   'Pazartesi',
   'Salı',
   'Çarşamba',
   'Perşembe',
   'Cuma',
+  'Cumartesi',
 ] as const
 
 export type DayName = (typeof DAY_ORDER)[number]
+
+export function dayRank(day: string): number {
+  const idx = DAY_ORDER.indexOf(day as DayName)
+  return idx === -1 ? 99 : idx
+}
 
 export type Appointment = {
   id: string
@@ -34,12 +39,12 @@ export type Appointment = {
 }
 
 const TIME_COLS: { col: number; day: DayName }[] = [
-  { col: 7, day: 'Cumartesi' },
   { col: 10, day: 'Pazartesi' },
   { col: 13, day: 'Salı' },
   { col: 16, day: 'Çarşamba' },
   { col: 19, day: 'Perşembe' },
   { col: 22, day: 'Cuma' },
+  { col: 7, day: 'Cumartesi' },
 ]
 
 function sheetToMatrix(sheet: XLSX.WorkSheet): string[][] {

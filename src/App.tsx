@@ -1,5 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { WorkBook } from 'xlsx'
+import {
+  compareClass,
+  sortByClassThenName,
+  themeForClass,
+} from './lib/classes'
 import {
   detectKoclukFile,
   detectLiveFile,
@@ -10,10 +15,15 @@ import {
   type MatkeysSyncResult,
 } from './lib/matkeys'
 import {
+  b64ToWorkbook,
+  loadPersisted,
+  savePersisted,
+  workbookToB64,
+} from './lib/persist'
+import {
   DAY_ORDER,
   fullName,
   parseAppointments,
-  type Appointment,
   type DayName,
 } from './lib/schedule'
 import './App.css'
@@ -48,6 +58,7 @@ function UploadBox({
 }
 
 function App() {
+  const [hydrated, setHydrated] = useState(false)
   const [liveName, setLiveName] = useState('')
   const [koclukName, setKoclukName] = useState('')
   const [liveBook, setLiveBook] = useState<WorkBook | null>(null)
@@ -56,26 +67,101 @@ function App() {
   const [error, setError] = useState('')
   const [day, setDay] = useState<DayName>('Pazartesi')
   const [view, setView] = useState<'takvim' | 'tablo'>('takvim')
+  const [savedAt, setSavedAt] = useState('')
+
+  useEffect(() => {
+    const saved = loadPersisted()
+    if (!saved) {
+      setHydrated(true)
+      return
+    }
+    try {
+      if (saved.liveB64) setLiveBook(b64ToWorkbook(saved.liveB64))
+      if (saved.koclukB64) setKoclukBook(b64ToWorkbook(saved.koclukB64))
+      if (saved.resultB64) {
+        const wb = b64ToWorkbook(saved.resultB64)
+        setResult({
+          workbook: wb,
+          changes: [],
+          summary: {
+            liveCount: 0,
+            kept: 0,
+            updated: 0,
+            removed: 0,
+            added: 0,
+            unplaced: 0,
+            emptySlots: 0,
+          },
+          previewRows: [],
+        })
+      }
+      setLiveName(saved.liveName || '')
+      setKoclukName(saved.koclukName || '')
+      if (DAY_ORDER.includes(saved.day as DayName)) {
+        setDay(saved.day as DayName)
+      }
+      if (saved.view === 'tablo' || saved.view === 'takvim') {
+        setView(saved.view)
+      }
+      setSavedAt(saved.savedAt || '')
+    } catch {
+      // bozuk kayıt
+    } finally {
+      setHydrated(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated) return
+    const stamp = new Date().toISOString()
+    savePersisted({
+      liveName,
+      koclukName,
+      liveB64: liveBook ? workbookToB64(liveBook) : null,
+      koclukB64: koclukBook ? workbookToB64(koclukBook) : null,
+      resultB64: result ? workbookToB64(result.workbook) : null,
+      day,
+      view,
+      savedAt: stamp,
+    })
+    if (liveBook || koclukBook || result) setSavedAt(stamp)
+  }, [hydrated, liveName, koclukName, liveBook, koclukBook, result, day, view])
 
   const liveStudents = useMemo(
-    () => (liveBook ? extractLiveStudents(liveBook) : []),
+    () => (liveBook ? sortByClassThenName(extractLiveStudents(liveBook)) : []),
     [liveBook],
   )
 
   const appointments = useMemo(() => {
-    if (result) return parseAppointments(result.workbook)
-    if (koclukBook) return parseAppointments(koclukBook)
-    return [] as Appointment[]
+    const list = result
+      ? parseAppointments(result.workbook)
+      : koclukBook
+        ? parseAppointments(koclukBook)
+        : []
+    return sortByClassThenName(list)
   }, [result, koclukBook])
 
-  const dayItems = useMemo(() => {
-    return appointments
+  const dayGroups = useMemo(() => {
+    const items = appointments
       .flatMap((a) =>
         a.slots
           .filter((s) => s.day === day)
           .map((s) => ({ ...s, appointment: a })),
       )
-      .sort((a, b) => a.timeMinutes - b.timeMinutes)
+      .sort((a, b) => {
+        const byClass = compareClass(a.appointment.sinif, b.appointment.sinif)
+        if (byClass !== 0) return byClass
+        return a.timeMinutes - b.timeMinutes
+      })
+
+    const map = new Map<string, typeof items>()
+    for (const item of items) {
+      const key = item.appointment.sinif || 'Sınıfsız'
+      const list = map.get(key) ?? []
+      list.push(item)
+      map.set(key, list)
+    }
+    return [...map.entries()].sort(([a], [b]) => compareClass(a, b))
   }, [appointments, day])
 
   const added = result?.changes.filter((c) => c.type === 'added') ?? []
@@ -127,6 +213,7 @@ function App() {
     try {
       setResult(syncMatkeys(liveBook, koclukBook, { fillEmptySlots: true }))
       setView('takvim')
+      setDay('Pazartesi')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Güncelleme yapılamadı.')
     }
@@ -138,12 +225,24 @@ function App() {
     downloadWorkbook(result.workbook, `kocluk-guncel-${stamp}.xlsx`)
   }
 
+  const savedLabel = savedAt
+    ? new Date(savedAt).toLocaleString('tr-TR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : ''
+
   return (
     <div className="sheet-app">
       <header className="sheet-top">
         <div>
           <p className="brand">KoçSenkron</p>
-          <h1>Dosyaları seçin, güncelleyin, takvimden takip edin</h1>
+          <h1>Dosyaları seçin, güncelleyin, sınıflara göre takip edin</h1>
+          {savedLabel ? (
+            <p className="saved-note">Son kayıt bu cihazda: {savedLabel}</p>
+          ) : null}
         </div>
       </header>
 
@@ -178,10 +277,10 @@ function App() {
         ) : null}
         <p>
           {!liveBook || !koclukBook
-            ? 'İki dosyayı seçince Güncelle aktif olur.'
-            : result
+            ? 'İki dosyayı seçince Güncelle aktif olur. Veriler bu tarayıcıda saklanır.'
+            : result && result.changes.length
               ? `${removed.length} çıkan · ${added.length} yeni · ${updated.length} güncellenen`
-              : 'Hazır — Güncelle’ye basın.'}
+              : 'Hazır — Güncelle’ye basın veya kayıtlı listenizi aşağıdan takip edin.'}
         </p>
       </div>
 
@@ -189,44 +288,35 @@ function App() {
 
       {(liveBook || koclukBook) && (
         <section className="previews">
-          <ExcelTable
-            title="Canlı liste önizleme"
+          <ClassExcelTable
+            title="Canlı liste"
             empty="Canlı Excel seçilmedi"
-            headers={['Sınıf', 'Ad', 'Soyad', 'Veli', 'Telefon']}
-            rows={liveStudents.slice(0, 40).map((s) => [
-              s.sinif,
-              s.ad,
-              s.soyad,
-              `${s.veliAd} ${s.veliSoyad}`.trim(),
-              s.telefon,
-            ])}
-            footer={
-              liveStudents.length > 40
-                ? `İlk 40 / ${liveStudents.length} öğrenci`
-                : liveStudents.length
-                  ? `${liveStudents.length} öğrenci`
-                  : undefined
-            }
+            headers={['Ad', 'Soyad', 'Veli', 'Telefon']}
+            rows={liveStudents.map((s) => ({
+              sinif: s.sinif,
+              cells: [
+                s.ad,
+                s.soyad,
+                `${s.veliAd} ${s.veliSoyad}`.trim(),
+                s.telefon,
+              ],
+            }))}
           />
-          <ExcelTable
-            title="Randevu listesi önizleme"
+          <ClassExcelTable
+            title="Randevu listesi"
             empty="Randevu Excel seçilmedi"
-            headers={['Sınıf', 'Ad', 'Soyad', 'Telefon', 'Saatler']}
-            rows={appointments.slice(0, 40).map((a) => [
-              a.sinif,
-              a.empty ? '—' : a.ad,
-              a.empty ? 'boş' : a.soyad,
-              a.telefon || '—',
-              a.slots.map((s) => `${s.day.slice(0, 3)} ${s.time || s.raw}`).join(', ') ||
-                '—',
-            ])}
-            footer={
-              appointments.length > 40
-                ? `İlk 40 / ${appointments.length} satır`
-                : appointments.length
-                  ? `${appointments.length} satır`
-                  : undefined
-            }
+            headers={['Ad', 'Soyad', 'Telefon', 'Saatler']}
+            rows={appointments.map((a) => ({
+              sinif: a.sinif,
+              cells: [
+                a.empty ? '—' : a.ad,
+                a.empty ? 'boş' : a.soyad,
+                a.telefon || '—',
+                a.slots
+                  .map((s) => `${s.day.slice(0, 3)} ${s.time || s.raw}`)
+                  .join(', ') || '—',
+              ],
+            }))}
           />
         </section>
       )}
@@ -273,28 +363,82 @@ function App() {
             })}
           </div>
 
-          {view === 'takvim' ? (
-            <DayTimeline items={dayItems} day={day} />
+          {dayGroups.length === 0 ? (
+            <p className="day-empty">{day} günü için randevu yok.</p>
+          ) : view === 'takvim' ? (
+            <div className="class-boards">
+              {dayGroups.map(([sinif, items]) => {
+                const theme = themeForClass(sinif)
+                return (
+                  <section
+                    key={sinif}
+                    className="class-board"
+                    style={
+                      {
+                        '--c-head': theme.head,
+                        '--c-bg': theme.bg,
+                        '--c-border': theme.border,
+                        '--c-soft': theme.soft,
+                      } as CSSProperties
+                    }
+                  >
+                    <header>
+                      <h3>{sinif}</h3>
+                      <span>{items.length} randevu</span>
+                    </header>
+                    <div className="timeline">
+                      {items.map((item, index) => (
+                        <article
+                          key={`${item.appointment.id}-${item.raw}-${index}`}
+                          className={
+                            item.appointment.empty ? 'tl empty' : 'tl'
+                          }
+                        >
+                          <time>{item.time || '—'}</time>
+                          <div>
+                            <strong>
+                              {item.appointment.empty
+                                ? 'Boş slot'
+                                : fullName(item.appointment)}
+                            </strong>
+                            <p>
+                              {item.appointment.telefon
+                                ? item.appointment.telefon
+                                : 'Telefon yok'}
+                              {item.label ? ` · ${item.label}` : ''}
+                            </p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                )
+              })}
+            </div>
           ) : (
-            <ExcelTable
+            <ClassExcelTable
               title={`${day} tablosu`}
               empty="Bu günde randevu yok"
-              headers={['Saat', 'Sınıf', 'Öğrenci', 'Telefon', 'Not']}
-              rows={dayItems.map((cell) => [
-                cell.time || cell.raw,
-                cell.appointment.sinif,
-                cell.appointment.empty
-                  ? 'Boş slot'
-                  : fullName(cell.appointment),
-                cell.appointment.telefon || '—',
-                cell.label || '—',
-              ])}
+              headers={['Saat', 'Öğrenci', 'Telefon', 'Not']}
+              rows={dayGroups.flatMap(([, items]) =>
+                items.map((cell) => ({
+                  sinif: cell.appointment.sinif,
+                  cells: [
+                    cell.time || cell.raw,
+                    cell.appointment.empty
+                      ? 'Boş slot'
+                      : fullName(cell.appointment),
+                    cell.appointment.telefon || '—',
+                    cell.label || '—',
+                  ],
+                })),
+              )}
             />
           )}
         </section>
       )}
 
-      {result && (
+      {result && result.changes.length > 0 && (
         <section className="result-strip">
           <ResultCol title="Çıkan" items={removed.map((c) => c.label)} />
           <ResultCol title="Yeni" items={added.map((c) => c.label)} />
@@ -305,96 +449,81 @@ function App() {
   )
 }
 
-function ExcelTable({
+function ClassExcelTable({
   title,
   headers,
   rows,
   empty,
-  footer,
 }: {
   title: string
   headers: string[]
-  rows: string[][]
+  rows: { sinif: string; cells: string[] }[]
   empty: string
-  footer?: string
 }) {
+  const groups = useMemo(() => {
+    const map = new Map<string, { sinif: string; cells: string[] }[]>()
+    for (const row of rows) {
+      const key = row.sinif || 'Sınıfsız'
+      const list = map.get(key) ?? []
+      list.push(row)
+      map.set(key, list)
+    }
+    return [...map.entries()].sort(([a], [b]) => compareClass(a, b))
+  }, [rows])
+
   return (
     <div className="x-table">
       <div className="x-table-title">{title}</div>
       <div className="x-table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th className="row-num" />
-              {headers.map((h) => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
+        {groups.length === 0 ? (
+          <table>
+            <tbody>
               <tr>
                 <td className="row-num">1</td>
-                <td colSpan={headers.length}>{empty}</td>
+                <td>{empty}</td>
               </tr>
-            ) : (
-              rows.map((row, i) => (
-                <tr key={`${title}-${i}`}>
-                  <td className="row-num">{i + 1}</td>
-                  {row.map((cell, j) => (
-                    <td key={j}>{cell || ''}</td>
+            </tbody>
+          </table>
+        ) : (
+          groups.map(([sinif, list]) => {
+            const theme = themeForClass(sinif)
+            return (
+              <table key={sinif} className="class-sheet">
+                <thead>
+                  <tr>
+                    <th
+                      className="class-banner"
+                      colSpan={headers.length + 1}
+                      style={{ background: theme.head }}
+                    >
+                      {sinif}
+                      <span>{list.length}</span>
+                    </th>
+                  </tr>
+                  <tr>
+                    <th className="row-num" style={{ background: theme.soft }} />
+                    {headers.map((h) => (
+                      <th key={h} style={{ background: theme.soft, color: theme.head }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((row, i) => (
+                    <tr key={`${sinif}-${i}`}>
+                      <td className="row-num">{i + 1}</td>
+                      {row.cells.map((cell, j) => (
+                        <td key={j}>{cell || ''}</td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                </tbody>
+              </table>
+            )
+          })
+        )}
       </div>
-      {footer ? <div className="x-table-foot">{footer}</div> : null}
-    </div>
-  )
-}
-
-function DayTimeline({
-  items,
-  day,
-}: {
-  day: DayName
-  items: {
-    time: string
-    raw: string
-    label: string
-    appointment: Appointment
-  }[]
-}) {
-  if (items.length === 0) {
-    return <p className="day-empty">{day} günü için randevu yok.</p>
-  }
-
-  return (
-    <div className="timeline">
-      {items.map((item, index) => (
-        <article
-          key={`${item.appointment.id}-${item.raw}-${index}`}
-          className={item.appointment.empty ? 'tl empty' : 'tl'}
-        >
-          <time>{item.time || '—'}</time>
-          <div>
-            <strong>
-              {item.appointment.empty
-                ? 'Boş slot'
-                : fullName(item.appointment)}
-            </strong>
-            <p>
-              {item.appointment.sinif}
-              {item.appointment.telefon
-                ? ` · ${item.appointment.telefon}`
-                : ''}
-              {item.label ? ` · ${item.label}` : ''}
-            </p>
-          </div>
-        </article>
-      ))}
     </div>
   )
 }

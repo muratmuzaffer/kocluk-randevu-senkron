@@ -1,10 +1,12 @@
 import * as XLSX from 'xlsx'
+import { compareClass } from './classes'
 import {
   cleanText,
   fullNameFold,
   fullNameKey,
   normalizeClass,
 } from './names'
+import { dayRank, parseTimeLabel } from './schedule'
 
 export type LiveStudent = {
   sinif: string
@@ -58,7 +60,14 @@ export type MatkeysSyncResult = {
 }
 
 const CLASS_SHEET = /^\d+[.\-]\w+$/i
-const TIME_COLS = [7, 10, 13, 16, 19, 22]
+const TIME_COLS: { col: number; day: string }[] = [
+  { col: 10, day: 'Pazartesi' },
+  { col: 13, day: 'Salı' },
+  { col: 16, day: 'Çarşamba' },
+  { col: 19, day: 'Perşembe' },
+  { col: 22, day: 'Cuma' },
+  { col: 7, day: 'Cumartesi' },
+]
 
 function sheetToMatrix(sheet: XLSX.WorkSheet): string[][] {
   const matrix = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(
@@ -137,7 +146,10 @@ function findKoclukSheet(workbook: XLSX.WorkBook): {
 }
 
 function rowTimes(row: string[]): string {
-  return TIME_COLS.map((c) => cleanText(row[c]))
+  return TIME_COLS.map(({ col, day }) => {
+    const raw = cleanText(row[col])
+    return raw ? `${day} ${raw}` : ''
+  })
     .filter(Boolean)
     .join(' · ')
 }
@@ -379,49 +391,76 @@ export function syncMatkeys(
   }
   patchStudentRows(outSheet, matrix)
 
-  // Okunaklı tek sayfalık özet (bozuk görünmesin diye)
-  const cleanAoa: (string | number)[][] = [
-    ['Sınıf', 'Ad', 'Soyad', 'Veli Ad', 'Veli Soyad', 'Telefon', 'Gün', 'Saat', 'Not'],
-  ]
+  // Okunaklı özet: sınıf → gün (Pzt–Cmt) → saat sırası
+  type CleanRow = {
+    sinif: string
+    ad: string
+    soyad: string
+    veliAd: string
+    veliSoyad: string
+    telefon: string
+    day: string
+    raw: string
+    minutes: number
+  }
+  const cleanRows: CleanRow[] = []
   for (let i = 2; i < matrix.length; i++) {
     const row = matrix[i]
     const ad = cleanText(row[2])
     const soyad = cleanText(row[3])
     if (!ad && !soyad) continue
-    const slots = TIME_COLS.map((col, idx) => {
+    const base = {
+      sinif: cleanText(row[1]),
+      ad,
+      soyad,
+      veliAd: cleanText(row[4]),
+      veliSoyad: cleanText(row[5]),
+      telefon: cleanText(row[6]),
+    }
+    const slots = TIME_COLS.map(({ col, day }) => {
       const raw = cleanText(row[col])
       if (!raw) return null
-      const days = ['Cumartesi', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma']
-      return { day: days[idx] ?? '', raw }
-    }).filter(Boolean) as { day: string; raw: string }[]
+      const parsed = parseTimeLabel(raw)
+      return {
+        day,
+        raw,
+        minutes: parsed.timeMinutes,
+      }
+    }).filter(Boolean) as { day: string; raw: string; minutes: number }[]
 
     if (slots.length === 0) {
-      cleanAoa.push([
-        cleanText(row[1]),
-        ad,
-        soyad,
-        cleanText(row[4]),
-        cleanText(row[5]),
-        cleanText(row[6]),
-        '',
-        '',
-        '',
-      ])
+      cleanRows.push({ ...base, day: '', raw: '', minutes: 9999 })
     } else {
       for (const slot of slots) {
-        cleanAoa.push([
-          cleanText(row[1]),
-          ad,
-          soyad,
-          cleanText(row[4]),
-          cleanText(row[5]),
-          cleanText(row[6]),
-          slot.day,
-          slot.raw,
-          '',
-        ])
+        cleanRows.push({ ...base, ...slot })
       }
     }
+  }
+
+  cleanRows.sort((a, b) => {
+    const byClass = compareClass(a.sinif, b.sinif)
+    if (byClass !== 0) return byClass
+    const byDay = dayRank(a.day) - dayRank(b.day)
+    if (byDay !== 0) return byDay
+    if (a.minutes !== b.minutes) return a.minutes - b.minutes
+    return `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr')
+  })
+
+  const cleanAoa: (string | number)[][] = [
+    ['Sınıf', 'Ad', 'Soyad', 'Veli Ad', 'Veli Soyad', 'Telefon', 'Gün', 'Saat', 'Not'],
+  ]
+  for (const row of cleanRows) {
+    cleanAoa.push([
+      row.sinif,
+      row.ad,
+      row.soyad,
+      row.veliAd,
+      row.veliSoyad,
+      row.telefon,
+      row.day,
+      row.raw,
+      '',
+    ])
   }
   const cleanSheet = XLSX.utils.aoa_to_sheet(cleanAoa)
   cleanSheet['!cols'] = [

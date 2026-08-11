@@ -241,7 +241,7 @@ function App() {
     <div className="home">
       <header className="home-bar">
         <div className="home-brand">
-          <p className="brand">KoçSenkron</p>
+          <p className="brand">Tarık Can Erdoğan</p>
           <h1>Randevu tahtam</h1>
         </div>
         <div className="home-actions">

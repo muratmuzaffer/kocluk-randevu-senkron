@@ -257,6 +257,15 @@ function App() {
               Excel indir
             </button>
           ) : null}
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => {
+              window.location.href = '/__logout'
+            }}
+          >
+            Çıkış yap
+          </button>
         </div>
       </header>
 

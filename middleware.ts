@@ -93,6 +93,17 @@ export default async function middleware(request: Request) {
 
   const url = new URL(request.url)
 
+  if (url.pathname === '/__logout') {
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: '/',
+        'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+        'Cache-Control': 'no-store',
+      },
+    })
+  }
+
   if (url.pathname === '/__login' && request.method === 'POST') {
     const form = await request.formData()
     const user = String(form.get('user') ?? '')

@@ -371,14 +371,80 @@ export function syncMatkeys(
     }
   }
 
-  // Workbook'a geri yaz
-  const out = structuredCloneWorkbook(koclukWorkbook)
-  const outSheet = XLSX.utils.aoa_to_sheet(matrix)
-  const prev = koclukWorkbook.Sheets[target.name]
-  if (prev?.['!merges']) outSheet['!merges'] = prev['!merges']
-  if (prev?.['!cols']) outSheet['!cols'] = prev['!cols']
-  if (prev?.['!rows']) outSheet['!rows'] = prev['!rows']
-  out.Sheets[target.name] = outSheet
+  // Mevcut sayfa düzenini bozmadan sadece öğrenci hücrelerini yaz
+  const out = cloneWorkbook(koclukWorkbook)
+  const outSheet = out.Sheets[target.name]
+  if (!outSheet) {
+    throw new Error('Koçluk sayfası kopyalanamadı.')
+  }
+  patchStudentRows(outSheet, matrix)
+
+  // Okunaklı tek sayfalık özet (bozuk görünmesin diye)
+  const cleanAoa: (string | number)[][] = [
+    ['Sınıf', 'Ad', 'Soyad', 'Veli Ad', 'Veli Soyad', 'Telefon', 'Gün', 'Saat', 'Not'],
+  ]
+  for (let i = 2; i < matrix.length; i++) {
+    const row = matrix[i]
+    const ad = cleanText(row[2])
+    const soyad = cleanText(row[3])
+    if (!ad && !soyad) continue
+    const slots = TIME_COLS.map((col, idx) => {
+      const raw = cleanText(row[col])
+      if (!raw) return null
+      const days = ['Cumartesi', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma']
+      return { day: days[idx] ?? '', raw }
+    }).filter(Boolean) as { day: string; raw: string }[]
+
+    if (slots.length === 0) {
+      cleanAoa.push([
+        cleanText(row[1]),
+        ad,
+        soyad,
+        cleanText(row[4]),
+        cleanText(row[5]),
+        cleanText(row[6]),
+        '',
+        '',
+        '',
+      ])
+    } else {
+      for (const slot of slots) {
+        cleanAoa.push([
+          cleanText(row[1]),
+          ad,
+          soyad,
+          cleanText(row[4]),
+          cleanText(row[5]),
+          cleanText(row[6]),
+          slot.day,
+          slot.raw,
+          '',
+        ])
+      }
+    }
+  }
+  const cleanSheet = XLSX.utils.aoa_to_sheet(cleanAoa)
+  cleanSheet['!cols'] = [
+    { wch: 8 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 28 },
+    { wch: 12 },
+  ]
+  if (out.Sheets['Guncel Randevu']) {
+    delete out.Sheets['Guncel Randevu']
+    out.SheetNames = out.SheetNames.filter((n) => n !== 'Guncel Randevu')
+  }
+  XLSX.utils.book_append_sheet(out, cleanSheet, 'Guncel Randevu')
+  // İndirince temiz sayfa açılsın
+  out.SheetNames = [
+    'Guncel Randevu',
+    ...out.SheetNames.filter((n) => n !== 'Guncel Randevu'),
+  ]
 
   const emptySlots = matrix
     .slice(2)
@@ -410,16 +476,35 @@ export function syncMatkeys(
   }
 }
 
-function structuredCloneWorkbook(workbook: XLSX.WorkBook): XLSX.WorkBook {
-  // SheetJS workbook'unu güvenli kopyala
-  const copy = XLSX.utils.book_new()
-  copy.Props = workbook.Props
-  copy.Custprops = workbook.Custprops
-  copy.Workbook = workbook.Workbook
-  for (const name of workbook.SheetNames) {
-    XLSX.utils.book_append_sheet(copy, workbook.Sheets[name], name)
+function cloneWorkbook(workbook: XLSX.WorkBook): XLSX.WorkBook {
+  const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })
+  return XLSX.read(buffer, { type: 'array', cellDates: true, raw: false })
+}
+
+function setTextCell(
+  sheet: XLSX.WorkSheet,
+  row: number,
+  col: number,
+  value: string,
+) {
+  const addr = XLSX.utils.encode_cell({ r: row, c: col })
+  sheet[addr] = { t: 's', v: value, w: value, z: '@' }
+}
+
+function patchStudentRows(sheet: XLSX.WorkSheet, matrix: string[][]) {
+  for (let r = 2; r < matrix.length; r++) {
+    const row = matrix[r]
+    // Sınıf + öğrenci/veli/telefon (saat kolonlarına dokunma)
+    for (const c of [1, 2, 3, 4, 5, 6]) {
+      setTextCell(sheet, r, c, cleanText(row[c]))
+    }
   }
-  return copy
+  if (!sheet['!ref']) {
+    sheet['!ref'] = XLSX.utils.encode_range({
+      s: { r: 0, c: 0 },
+      e: { r: Math.max(matrix.length - 1, 0), c: 24 },
+    })
+  }
 }
 
 export async function readWorkbook(file: File): Promise<XLSX.WorkBook> {

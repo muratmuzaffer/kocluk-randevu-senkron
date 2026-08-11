@@ -24,3 +24,5 @@ ornekler
 *.njsproj
 *.sln
 *.sw?
+
+.vercel

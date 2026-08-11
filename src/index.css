@@ -1,33 +1,24 @@
-@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #f3f5f7;
-  --surface: #ffffff;
-  --ink: #1c2430;
-  --muted: #667085;
-  --line: #e4e8ee;
-  --line-strong: #d0d7e1;
-  --accent: #0f6e6a;
-  --accent-soft: #e7f3f2;
-  --danger: #c23b2e;
-  --danger-soft: #fcecea;
-  --warn: #9a6700;
-  --warn-soft: #fff7e6;
-  --info: #1f5f8b;
-  --info-soft: #e8f2f8;
-  --ok: #0f6e6a;
-  --radius: 14px;
-  --shadow: 0 1px 2px rgba(28, 36, 48, 0.04), 0 8px 24px rgba(28, 36, 48, 0.04);
-  --sans: 'Figtree', 'Segoe UI', sans-serif;
-  --display: 'Fraunces', Georgia, serif;
+  --bg: #e9edf2;
+  --sheet: #ffffff;
+  --ink: #1f2328;
+  --muted: #5b6472;
+  --grid: #d7dde6;
+  --header: #f3f6fa;
+  --accent: #217346;
+  --accent-soft: #e8f5ee;
+  --rownum: #f7f8fa;
+  --danger: #c0392b;
+  --sans: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
 
   color: var(--muted);
   background: var(--bg);
   font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.5;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  font-size: 15px;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -45,14 +36,11 @@ body,
 body {
   min-height: 100vh;
   background:
-    radial-gradient(900px 380px at 0% 0%, #e7eef5 0%, transparent 55%),
-    radial-gradient(700px 320px at 100% 0%, #e8f2f0 0%, transparent 50%),
-    var(--bg);
+    linear-gradient(180deg, #dfe6ee 0%, var(--bg) 180px, var(--bg) 100%);
 }
 
 button,
-input,
-select {
+input {
   font: inherit;
 }
 

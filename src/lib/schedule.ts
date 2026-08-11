@@ -1,5 +1,5 @@
-import type { WorkBook } from 'xlsx'
-import * as XLSX from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
+import type { WorkBook } from 'xlsx-js-style'
 import { cleanText } from './names'
 
 export const DAY_ORDER = [

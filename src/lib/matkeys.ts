@@ -1,5 +1,5 @@
-import * as XLSX from 'xlsx'
-import { compareClass } from './classes'
+import * as XLSX from 'xlsx-js-style'
+import { compareClass, excelRgb, themeForClass } from './classes'
 import {
   cleanText,
   fullNameFold,
@@ -392,17 +392,6 @@ export function syncMatkeys(
   patchStudentRows(outSheet, matrix)
 
   // Okunaklı özet: sınıf → gün (Pzt–Cmt) → saat sırası
-  type CleanRow = {
-    sinif: string
-    ad: string
-    soyad: string
-    veliAd: string
-    veliSoyad: string
-    telefon: string
-    day: string
-    raw: string
-    minutes: number
-  }
   const cleanRows: CleanRow[] = []
   for (let i = 2; i < matrix.length; i++) {
     const row = matrix[i]
@@ -446,34 +435,7 @@ export function syncMatkeys(
     return `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr')
   })
 
-  const cleanAoa: (string | number)[][] = [
-    ['Sınıf', 'Ad', 'Soyad', 'Veli Ad', 'Veli Soyad', 'Telefon', 'Gün', 'Saat', 'Not'],
-  ]
-  for (const row of cleanRows) {
-    cleanAoa.push([
-      row.sinif,
-      row.ad,
-      row.soyad,
-      row.veliAd,
-      row.veliSoyad,
-      row.telefon,
-      row.day,
-      row.raw,
-      '',
-    ])
-  }
-  const cleanSheet = XLSX.utils.aoa_to_sheet(cleanAoa)
-  cleanSheet['!cols'] = [
-    { wch: 8 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 12 },
-    { wch: 28 },
-    { wch: 12 },
-  ]
+  const cleanSheet = buildColoredScheduleSheet(cleanRows)
   if (out.Sheets['Guncel Randevu']) {
     delete out.Sheets['Guncel Randevu']
     out.SheetNames = out.SheetNames.filter((n) => n !== 'Guncel Randevu')
@@ -513,6 +475,151 @@ export function syncMatkeys(
     },
     previewRows,
   }
+}
+
+type CleanRow = {
+  sinif: string
+  ad: string
+  soyad: string
+  veliAd: string
+  veliSoyad: string
+  telefon: string
+  day: string
+  raw: string
+  minutes: number
+}
+
+function solidFill(hex: string) {
+  return {
+    patternType: 'solid' as const,
+    fgColor: { rgb: excelRgb(hex) },
+  }
+}
+
+function buildColoredScheduleSheet(cleanRows: CleanRow[]): XLSX.WorkSheet {
+  const headers = [
+    'Sınıf',
+    'Ad',
+    'Soyad',
+    'Veli Ad',
+    'Veli Soyad',
+    'Telefon',
+    'Gün',
+    'Saat',
+    'Not',
+  ]
+  const aoa: (string | number)[][] = []
+  const merges: XLSX.Range[] = []
+  const bannerRows = new Map<number, string>()
+  const headerRows = new Set<number>()
+  const rowClass = new Map<number, string>()
+
+  const groups = new Map<string, CleanRow[]>()
+  for (const row of cleanRows) {
+    const key = row.sinif || 'Sınıfsız'
+    const list = groups.get(key) ?? []
+    list.push(row)
+    groups.set(key, list)
+  }
+  const ordered = [...groups.entries()].sort(([a], [b]) => compareClass(a, b))
+
+  for (const [sinif, rows] of ordered) {
+    const bannerIndex = aoa.length
+    aoa.push([`${sinif}  ·  ${rows.length} randevu`, '', '', '', '', '', '', '', ''])
+    merges.push({
+      s: { r: bannerIndex, c: 0 },
+      e: { r: bannerIndex, c: headers.length - 1 },
+    })
+    bannerRows.set(bannerIndex, sinif)
+
+    const headerIndex = aoa.length
+    aoa.push([...headers])
+    headerRows.add(headerIndex)
+    rowClass.set(headerIndex, sinif)
+
+    for (const row of rows) {
+      const idx = aoa.length
+      aoa.push([
+        row.sinif,
+        row.ad,
+        row.soyad,
+        row.veliAd,
+        row.veliSoyad,
+        row.telefon,
+        row.day,
+        row.raw,
+        '',
+      ])
+      rowClass.set(idx, sinif)
+    }
+
+    // sınıflar arası boşluk
+    aoa.push(['', '', '', '', '', '', '', '', ''])
+  }
+
+  const sheet = XLSX.utils.aoa_to_sheet(aoa)
+  sheet['!merges'] = merges
+  sheet['!cols'] = [
+    { wch: 10 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 28 },
+    { wch: 12 },
+  ]
+  sheet['!rows'] = aoa.map((_, i) =>
+    bannerRows.has(i) ? { hpt: 22 } : { hpt: 18 },
+  )
+
+  for (let r = 0; r < aoa.length; r++) {
+    for (let c = 0; c < headers.length; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c })
+      const cell = sheet[addr] ?? { t: 's', v: '' }
+      sheet[addr] = cell
+      cell.t = 's'
+      cell.z = '@'
+      if (cell.v == null) cell.v = ''
+
+      if (bannerRows.has(r)) {
+        const theme = themeForClass(bannerRows.get(r) ?? '')
+        cell.s = {
+          fill: solidFill(theme.head),
+          font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 12 },
+          alignment: { horizontal: 'left', vertical: 'center' },
+        }
+        continue
+      }
+
+      const sinif = rowClass.get(r)
+      if (!sinif) continue
+      const theme = themeForClass(sinif)
+
+      if (headerRows.has(r)) {
+        cell.s = {
+          fill: solidFill(theme.soft),
+          font: { bold: true, color: { rgb: excelRgb(theme.head) }, sz: 10 },
+          alignment: { horizontal: 'left', vertical: 'center' },
+          border: {
+            bottom: { style: 'thin', color: { rgb: excelRgb(theme.border) } },
+          },
+        }
+      } else {
+        cell.s = {
+          fill: solidFill(theme.bg),
+          font: { color: { rgb: 'FF1F2328' }, sz: 10 },
+          alignment: { vertical: 'center' },
+          border: {
+            bottom: { style: 'hair', color: { rgb: excelRgb(theme.border) } },
+          },
+        }
+      }
+    }
+  }
+
+  return sheet
 }
 
 function cloneWorkbook(workbook: XLSX.WorkBook): XLSX.WorkBook {

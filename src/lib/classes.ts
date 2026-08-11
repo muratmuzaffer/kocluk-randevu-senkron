@@ -58,3 +58,8 @@ export function sortByClassThenName<T extends { sinif: string; ad?: string; soya
     return an.localeCompare(bn, 'tr')
   })
 }
+
+/** Excel ARGB (AARRGGBB) */
+export function excelRgb(hex: string): string {
+  return `FF${hex.replace('#', '').toUpperCase()}`
+}

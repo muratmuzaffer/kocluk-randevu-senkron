@@ -1,5 +1,5 @@
-import * as XLSX from 'xlsx'
-import type { WorkBook } from 'xlsx'
+import * as XLSX from 'xlsx-js-style'
+import type { WorkBook } from 'xlsx-js-style'
 
 const KEY = 'kocsenkron-store-v1'
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import type { WorkBook } from 'xlsx'
+import type { WorkBook } from 'xlsx-js-style'
 import {
   compareClass,
   sortByClassThenName,

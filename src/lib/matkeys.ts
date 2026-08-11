@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx-js-style'
+import XLSX from 'xlsx-js-style'
 import { compareClass, excelRgb, themeForClass } from './classes'
 import {
   cleanText,
@@ -6,7 +6,12 @@ import {
   fullNameKey,
   normalizeClass,
 } from './names'
-import { dayRank, parseTimeLabel } from './schedule'
+import {
+  dayRank,
+  parseAppointments,
+  parseTimeLabel,
+  type Appointment,
+} from './schedule'
 
 export type LiveStudent = {
   sinif: string
@@ -603,16 +608,22 @@ function buildColoredScheduleSheet(cleanRows: CleanRow[]): XLSX.WorkSheet {
           font: { bold: true, color: { rgb: excelRgb(theme.head) }, sz: 10 },
           alignment: { horizontal: 'left', vertical: 'center' },
           border: {
+            top: { style: 'thin', color: { rgb: excelRgb(theme.border) } },
             bottom: { style: 'thin', color: { rgb: excelRgb(theme.border) } },
+            left: { style: 'thin', color: { rgb: excelRgb(theme.border) } },
+            right: { style: 'thin', color: { rgb: excelRgb(theme.border) } },
           },
         }
-      } else {
+      } else if (cleanText(aoa[r]?.[0]) || cleanText(aoa[r]?.[1])) {
         cell.s = {
           fill: solidFill(theme.bg),
           font: { color: { rgb: 'FF1F2328' }, sz: 10 },
           alignment: { vertical: 'center' },
           border: {
-            bottom: { style: 'hair', color: { rgb: excelRgb(theme.border) } },
+            top: { style: 'thin', color: { rgb: excelRgb(theme.border) } },
+            bottom: { style: 'thin', color: { rgb: excelRgb(theme.border) } },
+            left: { style: 'thin', color: { rgb: excelRgb(theme.border) } },
+            right: { style: 'thin', color: { rgb: excelRgb(theme.border) } },
           },
         }
       }
@@ -659,10 +670,56 @@ export async function readWorkbook(file: File): Promise<XLSX.WorkBook> {
 }
 
 export function downloadWorkbook(workbook: XLSX.WorkBook, fileName: string) {
-  XLSX.writeFile(
-    workbook,
-    fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`,
-  )
+  // Her indirmede taze, tek sayfalık renkli kitap yaz (stil kaybını önler)
+  downloadColoredSchedule(workbook, fileName)
+}
+
+export function downloadColoredSchedule(
+  workbook: XLSX.WorkBook,
+  fileName: string,
+) {
+  const cleanRows = cleanRowsFromAppointments(parseAppointments(workbook))
+  const sheet = buildColoredScheduleSheet(cleanRows)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, sheet, 'Randevular')
+  const name = fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`
+  XLSX.writeFile(wb, name, { bookType: 'xlsx', cellStyles: true })
+}
+
+function cleanRowsFromAppointments(appointments: Appointment[]): CleanRow[] {
+  const rows: CleanRow[] = []
+  for (const a of appointments) {
+    if (a.empty) continue
+    const base = {
+      sinif: a.sinif,
+      ad: a.ad,
+      soyad: a.soyad,
+      veliAd: a.veliAd,
+      veliSoyad: a.veliSoyad,
+      telefon: a.telefon,
+    }
+    if (a.slots.length === 0) {
+      rows.push({ ...base, day: '', raw: '', minutes: 9999 })
+      continue
+    }
+    for (const slot of a.slots) {
+      rows.push({
+        ...base,
+        day: slot.day,
+        raw: slot.raw,
+        minutes: slot.timeMinutes,
+      })
+    }
+  }
+  rows.sort((a, b) => {
+    const byClass = compareClass(a.sinif, b.sinif)
+    if (byClass !== 0) return byClass
+    const byDay = dayRank(a.day) - dayRank(b.day)
+    if (byDay !== 0) return byDay
+    if (a.minutes !== b.minutes) return a.minutes - b.minutes
+    return `${a.ad} ${a.soyad}`.localeCompare(`${b.ad} ${b.soyad}`, 'tr')
+  })
+  return rows
 }
 
 export function detectLiveFile(workbook: XLSX.WorkBook): boolean {

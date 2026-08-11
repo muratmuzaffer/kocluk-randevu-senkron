@@ -195,7 +195,6 @@ function App() {
       setKoclukBook(book)
       setKoclukName(file.name)
       setResult(null)
-      setShowFiles(false)
     } catch {
       setError('Randevu listesi okunamadı.')
     }

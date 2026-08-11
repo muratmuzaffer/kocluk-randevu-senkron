@@ -9,7 +9,6 @@ import {
   detectKoclukFile,
   detectLiveFile,
   downloadWorkbook,
-  extractLiveStudents,
   readWorkbook,
   syncMatkeys,
   type MatkeysSyncResult,
@@ -24,41 +23,22 @@ import {
   DAY_ORDER,
   fullName,
   parseAppointments,
+  type Appointment,
   type DayName,
 } from './lib/schedule'
 import './App.css'
 
-function UploadBox({
-  title,
-  hint,
-  fileName,
-  onFile,
-}: {
-  title: string
-  hint: string
-  fileName?: string
-  onFile: (file: File) => void
-}) {
-  return (
-    <label className={`x-upload ${fileName ? 'on' : ''}`}>
-      <input
-        type="file"
-        accept=".xlsx,.xls"
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) onFile(file)
-          e.currentTarget.value = ''
-        }}
-      />
-      <strong>{title}</strong>
-      <span>{hint}</span>
-      <em>{fileName ?? 'Dosya seç…'}</em>
-    </label>
-  )
+type SlotItem = {
+  time: string
+  raw: string
+  label: string
+  timeMinutes: number
+  appointment: Appointment
 }
 
 function App() {
   const [hydrated, setHydrated] = useState(false)
+  const [showFiles, setShowFiles] = useState(false)
   const [liveName, setLiveName] = useState('')
   const [koclukName, setKoclukName] = useState('')
   const [liveBook, setLiveBook] = useState<WorkBook | null>(null)
@@ -66,22 +46,24 @@ function App() {
   const [result, setResult] = useState<MatkeysSyncResult | null>(null)
   const [error, setError] = useState('')
   const [day, setDay] = useState<DayName>('Pazartesi')
-  const [view, setView] = useState<'takvim' | 'tablo'>('takvim')
+  const [query, setQuery] = useState('')
+  const [classFilter, setClassFilter] = useState('all')
   const [savedAt, setSavedAt] = useState('')
+  const [flash, setFlash] = useState('')
 
   useEffect(() => {
     const saved = loadPersisted()
     if (!saved) {
       setHydrated(true)
+      setShowFiles(true)
       return
     }
     try {
       if (saved.liveB64) setLiveBook(b64ToWorkbook(saved.liveB64))
       if (saved.koclukB64) setKoclukBook(b64ToWorkbook(saved.koclukB64))
       if (saved.resultB64) {
-        const wb = b64ToWorkbook(saved.resultB64)
         setResult({
-          workbook: wb,
+          workbook: b64ToWorkbook(saved.resultB64),
           changes: [],
           summary: {
             liveCount: 0,
@@ -97,15 +79,11 @@ function App() {
       }
       setLiveName(saved.liveName || '')
       setKoclukName(saved.koclukName || '')
-      if (DAY_ORDER.includes(saved.day as DayName)) {
-        setDay(saved.day as DayName)
-      }
-      if (saved.view === 'tablo' || saved.view === 'takvim') {
-        setView(saved.view)
-      }
+      if (DAY_ORDER.includes(saved.day as DayName)) setDay(saved.day as DayName)
       setSavedAt(saved.savedAt || '')
+      setShowFiles(!(saved.koclukB64 || saved.resultB64))
     } catch {
-      // bozuk kayıt
+      setShowFiles(true)
     } finally {
       setHydrated(true)
     }
@@ -121,16 +99,11 @@ function App() {
       koclukB64: koclukBook ? workbookToB64(koclukBook) : null,
       resultB64: result ? workbookToB64(result.workbook) : null,
       day,
-      view,
+      view: 'takvim',
       savedAt: stamp,
     })
     if (liveBook || koclukBook || result) setSavedAt(stamp)
-  }, [hydrated, liveName, koclukName, liveBook, koclukBook, result, day, view])
-
-  const liveStudents = useMemo(
-    () => (liveBook ? sortByClassThenName(extractLiveStudents(liveBook)) : []),
-    [liveBook],
-  )
+  }, [hydrated, liveName, koclukName, liveBook, koclukBook, result, day])
 
   const appointments = useMemo(() => {
     const list = result
@@ -141,46 +114,71 @@ function App() {
     return sortByClassThenName(list)
   }, [result, koclukBook])
 
-  const dayGroups = useMemo(() => {
-    const items = appointments
-      .flatMap((a) =>
-        a.slots
-          .filter((s) => s.day === day)
-          .map((s) => ({ ...s, appointment: a })),
-      )
-      .sort((a, b) => {
-        const byClass = compareClass(a.appointment.sinif, b.appointment.sinif)
-        if (byClass !== 0) return byClass
-        return a.timeMinutes - b.timeMinutes
-      })
+  const classes = useMemo(() => {
+    const set = new Set(appointments.map((a) => a.sinif).filter(Boolean))
+    return [...set].sort(compareClass)
+  }, [appointments])
 
-    const map = new Map<string, typeof items>()
-    for (const item of items) {
+  const filtered = useMemo(() => {
+    const q = query.trim().toLocaleLowerCase('tr-TR')
+    return appointments.filter((a) => {
+      if (classFilter !== 'all' && a.sinif !== classFilter) return false
+      if (!q) return true
+      const hay = [
+        a.ad,
+        a.soyad,
+        a.sinif,
+        a.telefon,
+        ...a.slots.map((s) => s.raw),
+      ]
+        .join(' ')
+        .toLocaleLowerCase('tr-TR')
+      return hay.includes(q)
+    })
+  }, [appointments, query, classFilter])
+
+  const week = useMemo(() => {
+    return DAY_ORDER.map((d) => {
+      const items: SlotItem[] = filtered
+        .flatMap((a) =>
+          a.slots
+            .filter((s) => s.day === d)
+            .map((s) => ({ ...s, appointment: a })),
+        )
+        .sort((a, b) => {
+          if (a.timeMinutes !== b.timeMinutes) return a.timeMinutes - b.timeMinutes
+          return compareClass(a.appointment.sinif, b.appointment.sinif)
+        })
+      return { day: d, items }
+    })
+  }, [filtered])
+
+  const dayItems = week.find((w) => w.day === day)?.items ?? []
+
+  const dayGroups = useMemo(() => {
+    const map = new Map<string, SlotItem[]>()
+    for (const item of dayItems) {
       const key = item.appointment.sinif || 'Sınıfsız'
       const list = map.get(key) ?? []
       list.push(item)
       map.set(key, list)
     }
     return [...map.entries()].sort(([a], [b]) => compareClass(a, b))
-  }, [appointments, day])
+  }, [dayItems])
 
-  const added = result?.changes.filter((c) => c.type === 'added') ?? []
-  const removed = result?.changes.filter((c) => c.type === 'removed') ?? []
-  const updated = result?.changes.filter((c) => c.type === 'updated') ?? []
+  const totalSlots = week.reduce((n, w) => n + w.items.length, 0)
 
   async function handleLive(file: File) {
     setError('')
-    setResult(null)
     try {
       const book = await readWorkbook(file)
       if (!detectLiveFile(book)) {
         setError('Canlı listede 5.B / 6.C gibi sınıf sayfaları olmalı.')
-        setLiveBook(null)
-        setLiveName('')
         return
       }
       setLiveBook(book)
       setLiveName(file.name)
+      setResult(null)
     } catch {
       setError('Canlı liste okunamadı.')
     }
@@ -188,17 +186,16 @@ function App() {
 
   async function handleKocluk(file: File) {
     setError('')
-    setResult(null)
     try {
       const book = await readWorkbook(file)
       if (!detectKoclukFile(book)) {
         setError('Randevu Excel’inde gün/saat tablosu (Sayfa2) olmalı.')
-        setKoclukBook(null)
-        setKoclukName('')
         return
       }
       setKoclukBook(book)
       setKoclukName(file.name)
+      setResult(null)
+      setShowFiles(false)
     } catch {
       setError('Randevu listesi okunamadı.')
     }
@@ -207,13 +204,17 @@ function App() {
   function runUpdate() {
     if (!liveBook || !koclukBook) {
       setError('Güncellemek için iki Excel’i de seçin.')
+      setShowFiles(true)
       return
     }
     setError('')
     try {
-      setResult(syncMatkeys(liveBook, koclukBook, { fillEmptySlots: true }))
-      setView('takvim')
-      setDay('Pazartesi')
+      const next = syncMatkeys(liveBook, koclukBook, { fillEmptySlots: true })
+      setResult(next)
+      setShowFiles(false)
+      setFlash(
+        `${next.summary.removed} çıkan · ${next.summary.added} yeni · ${next.summary.updated} güncellenen`,
+      )
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Güncelleme yapılamadı.')
     }
@@ -221,8 +222,10 @@ function App() {
 
   function download() {
     if (!result) return
-    const stamp = new Date().toISOString().slice(0, 10)
-    downloadWorkbook(result.workbook, `kocluk-guncel-${stamp}.xlsx`)
+    downloadWorkbook(
+      result.workbook,
+      `kocluk-guncel-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    )
   }
 
   const savedLabel = savedAt
@@ -235,313 +238,235 @@ function App() {
     : ''
 
   return (
-    <div className="sheet-app">
-      <header className="sheet-top">
-        <div>
+    <div className="home">
+      <header className="home-bar">
+        <div className="home-brand">
           <p className="brand">KoçSenkron</p>
-          <h1>Dosyaları seçin, güncelleyin, sınıflara göre takip edin</h1>
-          {savedLabel ? (
-            <p className="saved-note">Son kayıt bu cihazda: {savedLabel}</p>
+          <h1>Randevu tahtam</h1>
+        </div>
+        <div className="home-actions">
+          {savedLabel ? <span className="pill">Kayıtlı · {savedLabel}</span> : null}
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => setShowFiles((v) => !v)}
+          >
+            {showFiles ? 'Dosyaları gizle' : 'Excel yükle / güncelle'}
+          </button>
+          {result ? (
+            <button type="button" className="btn ghost" onClick={download}>
+              Excel indir
+            </button>
           ) : null}
         </div>
       </header>
 
-      <section className="pickers">
-        <UploadBox
-          title="1 · Canlı sınıf listesi"
-          hint="Örn. Tarık Hoca Canlı.xlsx"
-          fileName={liveName || undefined}
-          onFile={handleLive}
-        />
-        <UploadBox
-          title="2 · Randevu listeniz"
-          hint="Örn. koçluk tüm liste.xlsx"
-          fileName={koclukName || undefined}
-          onFile={handleKocluk}
-        />
-      </section>
-
-      <div className="update-bar">
-        <button
-          type="button"
-          className="btn-update"
-          onClick={runUpdate}
-          disabled={!liveBook || !koclukBook}
-        >
-          Güncelle
-        </button>
-        {result ? (
-          <button type="button" className="btn-down" onClick={download}>
-            Excel indir
+      {showFiles && (
+        <section className="files-panel">
+          <label className={`file-chip ${liveName ? 'on' : ''}`}>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) handleLive(f)
+                e.currentTarget.value = ''
+              }}
+            />
+            <strong>Canlı liste</strong>
+            <span>{liveName || 'Tarık Hoca Canlı.xlsx seç'}</span>
+          </label>
+          <label className={`file-chip ${koclukName ? 'on' : ''}`}>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) handleKocluk(f)
+                e.currentTarget.value = ''
+              }}
+            />
+            <strong>Randevu listesi</strong>
+            <span>{koclukName || 'koçluk tüm liste.xlsx seç'}</span>
+          </label>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={runUpdate}
+            disabled={!liveBook || !koclukBook}
+          >
+            Güncelle
           </button>
-        ) : null}
-        <p>
-          {!liveBook || !koclukBook
-            ? 'İki dosyayı seçince Güncelle aktif olur. Veriler bu tarayıcıda saklanır.'
-            : result && result.changes.length
-              ? `${removed.length} çıkan · ${added.length} yeni · ${updated.length} güncellenen`
-              : 'Hazır — Güncelle’ye basın veya kayıtlı listenizi aşağıdan takip edin.'}
-        </p>
-      </div>
+        </section>
+      )}
 
       {error ? <p className="alert">{error}</p> : null}
+      {flash ? (
+        <p className="flash">
+          Güncellendi: {flash}
+          <button type="button" onClick={() => setFlash('')}>
+            Tamam
+          </button>
+        </p>
+      ) : null}
 
-      {(liveBook || koclukBook) && (
-        <section className="previews">
-          <ClassExcelTable
-            title="Canlı liste"
-            empty="Canlı Excel seçilmedi"
-            headers={['Ad', 'Soyad', 'Veli', 'Telefon']}
-            rows={liveStudents.map((s) => ({
-              sinif: s.sinif,
-              cells: [
-                s.ad,
-                s.soyad,
-                `${s.veliAd} ${s.veliSoyad}`.trim(),
-                s.telefon,
-              ],
-            }))}
-          />
-          <ClassExcelTable
-            title="Randevu listesi"
-            empty="Randevu Excel seçilmedi"
-            headers={['Ad', 'Soyad', 'Telefon', 'Saatler']}
-            rows={appointments.map((a) => ({
-              sinif: a.sinif,
-              cells: [
-                a.empty ? '—' : a.ad,
-                a.empty ? 'boş' : a.soyad,
-                a.telefon || '—',
-                a.slots
-                  .map((s) => `${s.day.slice(0, 3)} ${s.time || s.raw}`)
-                  .join(', ') || '—',
-              ],
-            }))}
-          />
+      {appointments.length === 0 ? (
+        <section className="empty-home">
+          <h2>Henüz randevu yok</h2>
+          <p>
+            Randevu Excel’inizi yükleyin. Liste bu sayfada kalır; her gün buradan
+            takip edersiniz.
+          </p>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => setShowFiles(true)}
+          >
+            Excel yükle
+          </button>
         </section>
-      )}
-
-      {appointments.length > 0 && (
-        <section className="board-wrap">
-          <div className="board-head">
-            <h2>Günlük randevular</h2>
-            <div className="view-switch">
-              <button
-                type="button"
-                className={view === 'takvim' ? 'on' : ''}
-                onClick={() => setView('takvim')}
-              >
-                Takvim
-              </button>
-              <button
-                type="button"
-                className={view === 'tablo' ? 'on' : ''}
-                onClick={() => setView('tablo')}
-              >
-                Tablo
-              </button>
-            </div>
-          </div>
-
-          <div className="day-tabs">
-            {DAY_ORDER.map((d) => {
-              const count = appointments.reduce(
-                (n, a) => n + a.slots.filter((s) => s.day === d).length,
-                0,
-              )
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  className={day === d ? 'on' : ''}
-                  onClick={() => setDay(d)}
-                >
-                  {d}
-                  <small>{count}</small>
-                </button>
-              )
-            })}
-          </div>
-
-          {dayGroups.length === 0 ? (
-            <p className="day-empty">{day} günü için randevu yok.</p>
-          ) : view === 'takvim' ? (
-            <div className="class-boards">
-              {dayGroups.map(([sinif, items]) => {
-                const theme = themeForClass(sinif)
-                return (
-                  <section
-                    key={sinif}
-                    className="class-board"
-                    style={
-                      {
-                        '--c-head': theme.head,
-                        '--c-bg': theme.bg,
-                        '--c-border': theme.border,
-                        '--c-soft': theme.soft,
-                      } as CSSProperties
-                    }
-                  >
-                    <header>
-                      <h3>{sinif}</h3>
-                      <span>{items.length} randevu</span>
-                    </header>
-                    <div className="timeline">
-                      {items.map((item, index) => (
-                        <article
-                          key={`${item.appointment.id}-${item.raw}-${index}`}
-                          className={
-                            item.appointment.empty ? 'tl empty' : 'tl'
-                          }
-                        >
-                          <time>{item.time || '—'}</time>
-                          <div>
-                            <strong>
-                              {item.appointment.empty
-                                ? 'Boş slot'
-                                : fullName(item.appointment)}
-                            </strong>
-                            <p>
-                              {item.appointment.telefon
-                                ? item.appointment.telefon
-                                : 'Telefon yok'}
-                              {item.label ? ` · ${item.label}` : ''}
-                            </p>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                )
-              })}
-            </div>
-          ) : (
-            <ClassExcelTable
-              title={`${day} tablosu`}
-              empty="Bu günde randevu yok"
-              headers={['Saat', 'Öğrenci', 'Telefon', 'Not']}
-              rows={dayGroups.flatMap(([, items]) =>
-                items.map((cell) => ({
-                  sinif: cell.appointment.sinif,
-                  cells: [
-                    cell.time || cell.raw,
-                    cell.appointment.empty
-                      ? 'Boş slot'
-                      : fullName(cell.appointment),
-                    cell.appointment.telefon || '—',
-                    cell.label || '—',
-                  ],
-                })),
-              )}
-            />
-          )}
-        </section>
-      )}
-
-      {result && result.changes.length > 0 && (
-        <section className="result-strip">
-          <ResultCol title="Çıkan" items={removed.map((c) => c.label)} />
-          <ResultCol title="Yeni" items={added.map((c) => c.label)} />
-          <ResultCol title="Güncellenen" items={updated.map((c) => c.label)} />
-        </section>
-      )}
-    </div>
-  )
-}
-
-function ClassExcelTable({
-  title,
-  headers,
-  rows,
-  empty,
-}: {
-  title: string
-  headers: string[]
-  rows: { sinif: string; cells: string[] }[]
-  empty: string
-}) {
-  const groups = useMemo(() => {
-    const map = new Map<string, { sinif: string; cells: string[] }[]>()
-    for (const row of rows) {
-      const key = row.sinif || 'Sınıfsız'
-      const list = map.get(key) ?? []
-      list.push(row)
-      map.set(key, list)
-    }
-    return [...map.entries()].sort(([a], [b]) => compareClass(a, b))
-  }, [rows])
-
-  return (
-    <div className="x-table">
-      <div className="x-table-title">{title}</div>
-      <div className="x-table-scroll">
-        {groups.length === 0 ? (
-          <table>
-            <tbody>
-              <tr>
-                <td className="row-num">1</td>
-                <td>{empty}</td>
-              </tr>
-            </tbody>
-          </table>
-        ) : (
-          groups.map(([sinif, list]) => {
-            const theme = themeForClass(sinif)
-            return (
-              <table key={sinif} className="class-sheet">
-                <thead>
-                  <tr>
-                    <th
-                      className="class-banner"
-                      colSpan={headers.length + 1}
-                      style={{ background: theme.head }}
-                    >
-                      {sinif}
-                      <span>{list.length}</span>
-                    </th>
-                  </tr>
-                  <tr>
-                    <th className="row-num" style={{ background: theme.soft }} />
-                    {headers.map((h) => (
-                      <th key={h} style={{ background: theme.soft, color: theme.head }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.map((row, i) => (
-                    <tr key={`${sinif}-${i}`}>
-                      <td className="row-num">{i + 1}</td>
-                      {row.cells.map((cell, j) => (
-                        <td key={j}>{cell || ''}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )
-          })
-        )}
-      </div>
-    </div>
-  )
-}
-
-function ResultCol({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="result-col">
-      <h3>
-        {title} <span>{items.length}</span>
-      </h3>
-      {items.length === 0 ? (
-        <p>—</p>
       ) : (
-        <ul>
-          {items.map((name) => (
-            <li key={name}>{name}</li>
-          ))}
-        </ul>
+        <>
+          <section className="track-head">
+            <div>
+              <h2>{day}</h2>
+              <p>
+                {dayItems.length} randevu · bu hafta {totalSlots} dilim ·{' '}
+                {classes.length} sınıf
+              </p>
+            </div>
+            <div className="track-filters">
+              <input
+                type="search"
+                placeholder="Öğrenci ara…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <select
+                value={classFilter}
+                onChange={(e) => setClassFilter(e.target.value)}
+                aria-label="Sınıf"
+              >
+                <option value="all">Tüm sınıflar</option>
+                {classes.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </section>
+
+          <nav className="days" aria-label="Günler">
+            {week.map(({ day: d, items }) => (
+              <button
+                key={d}
+                type="button"
+                className={day === d ? 'on' : ''}
+                onClick={() => setDay(d)}
+              >
+                <strong>{d}</strong>
+                <span>{items.length}</span>
+              </button>
+            ))}
+          </nav>
+
+          {/* Masaüstü: haftalık şerit özeti */}
+          <section className="week-strip" aria-label="Haftalık özet">
+            {week.map(({ day: d, items }) => (
+              <button
+                key={`strip-${d}`}
+                type="button"
+                className={`week-col ${day === d ? 'on' : ''}`}
+                onClick={() => setDay(d)}
+              >
+                <header>
+                  <span>{d.slice(0, 3)}</span>
+                  <em>{items.length}</em>
+                </header>
+                <ul>
+                  {items.slice(0, 6).map((item, i) => {
+                    const theme = themeForClass(item.appointment.sinif)
+                    return (
+                      <li
+                        key={`${d}-${item.appointment.id}-${i}`}
+                        style={{ borderLeftColor: theme.head }}
+                      >
+                        <b>{item.time || '—'}</b>
+                        <span>
+                          {item.appointment.empty
+                            ? 'Boş'
+                            : fullName(item.appointment)}
+                        </span>
+                      </li>
+                    )
+                  })}
+                  {items.length > 6 ? (
+                    <li className="more">+{items.length - 6} daha</li>
+                  ) : null}
+                </ul>
+              </button>
+            ))}
+          </section>
+
+          {/* Seçili gün — ana takip alanı */}
+          <section className="day-panel">
+            <div className="day-panel-title">
+              <h3>{day} programı</h3>
+              <span>{dayItems.length} randevu</span>
+            </div>
+
+            {dayGroups.length === 0 ? (
+              <p className="day-empty">Bu günde randevu yok.</p>
+            ) : (
+              <div className="class-grid">
+                {dayGroups.map(([sinif, items]) => {
+                  const theme = themeForClass(sinif)
+                  return (
+                    <article
+                      key={sinif}
+                      className="class-card"
+                      style={
+                        {
+                          '--c-head': theme.head,
+                          '--c-bg': theme.bg,
+                          '--c-border': theme.border,
+                          '--c-soft': theme.soft,
+                        } as CSSProperties
+                      }
+                    >
+                      <header>
+                        <h4>{sinif}</h4>
+                        <span>{items.length}</span>
+                      </header>
+                      <ol>
+                        {items.map((item, index) => (
+                          <li
+                            key={`${sinif}-${item.appointment.id}-${index}`}
+                            className={item.appointment.empty ? 'empty' : ''}
+                          >
+                            <time>{item.time || '—'}</time>
+                            <div>
+                              <strong>
+                                {item.appointment.empty
+                                  ? 'Boş slot'
+                                  : fullName(item.appointment)}
+                              </strong>
+                              <p>
+                                {item.appointment.telefon || 'Telefon yok'}
+                                {item.label ? ` · ${item.label}` : ''}
+                              </p>
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+        </>
       )}
     </div>
   )

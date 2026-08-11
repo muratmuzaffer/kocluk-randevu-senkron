@@ -14,4 +14,6 @@ npm install
 npm run dev
 ```
 
-Canlı: https://kocluk-randevu-senkron.vercel.app
+Canlı: https://tarik-can-erdogan.vercel.app
+
+Giriş (canlı site): kullanıcı adı ve şifre tarayıcıda sorulur.

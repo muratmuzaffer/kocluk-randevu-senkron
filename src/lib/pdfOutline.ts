@@ -1,6 +1,8 @@
+import { parseCards } from './bookCards'
+
 export type PageKind = 'kapak' | 'hazir' | 'basla' | 'giris' | 'soru'
 
-export type SlideFace = 'title' | 'page'
+export type SlideFace = 'title' | 'card'
 
 export type Unit = {
   id: string
@@ -16,6 +18,8 @@ export type DeckSlide = {
   label: string
   heading: string
   face: SlideFace
+  prompt: string
+  choices: string[]
 }
 
 export type Deck = {
@@ -264,6 +268,8 @@ export function blendDeck(unit: Unit, pages: string[]): Deck {
       label: nextHeading,
       heading: nextHeading,
       face: 'title',
+      prompt: '',
+      choices: [],
     })
   }
 
@@ -280,13 +286,19 @@ export function blendDeck(unit: Unit, pages: string[]): Deck {
       kind = next.kind
       if (heading !== unit.title) pushTitle(kind, heading)
     }
-    slides.push({
-      kind,
-      page,
-      label: KIND_LABEL[kind],
-      heading,
-      face: 'page',
-    })
+    const cards = parseCards(text)
+    if (cards.length === 0) continue
+    for (const card of cards) {
+      slides.push({
+        kind,
+        page,
+        label: KIND_LABEL[kind],
+        heading,
+        face: 'card',
+        prompt: card.prompt,
+        choices: card.choices,
+      })
+    }
   }
 
   if (slides.length === 0) {
@@ -299,7 +311,9 @@ export function blendDeck(unit: Unit, pages: string[]): Deck {
         page: fallback,
         label: KIND_LABEL.giris,
         heading: unit.title,
-        face: 'page',
+        face: 'card',
+        prompt: parseCards(pages[fallback - 1] || '')[0]?.prompt || unit.title,
+        choices: parseCards(pages[fallback - 1] || '')[0]?.choices || [],
       })
     }
   }
@@ -316,7 +330,7 @@ export function kindCounts(deck: Deck) {
     soru: 0,
   }
   for (const s of deck.slides) {
-    if (s.face === 'page') counts[s.kind]++
+    if (s.face === 'card') counts[s.kind]++
   }
   return counts
 }

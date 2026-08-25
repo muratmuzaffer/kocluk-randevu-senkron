@@ -6,7 +6,6 @@ import {
   findUnits,
   kindCounts,
   loadPdf,
-  renderPageDataUrl,
   type Deck,
   type Unit,
 } from './lib/pdfSlides'
@@ -37,7 +36,6 @@ export default function SlaytPage({ active }: Props) {
   const [selected, setSelected] = useState('')
   const [deck, setDeck] = useState<Deck | null>(null)
   const [index, setIndex] = useState(0)
-  const [preview, setPreview] = useState('')
   const [exporting, setExporting] = useState(false)
 
   const unit = units.find((u) => u.id === selected) ?? null
@@ -62,25 +60,6 @@ export default function SlaytPage({ active }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [deck, active])
-
-  useEffect(() => {
-    if (!deck || !current || !pdfRef.current) {
-      setPreview('')
-      return
-    }
-    let cancelled = false
-    setPreview('')
-    renderPageDataUrl(pdfRef.current, current.page, 1.35, true)
-      .then((url) => {
-        if (!cancelled) setPreview(url)
-      })
-      .catch(() => {
-        if (!cancelled) setError('Sayfa önizlemesi alınamadı.')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [deck, current])
 
   async function onFile(file: File) {
     setError('')
@@ -144,9 +123,8 @@ export default function SlaytPage({ active }: Props) {
   return (
     <div className="slayt-pane">
       <p className="slayt-lead">
-        Kitap PDF’ini yükleyin, üniteyi seçin. Görseller kitaptan gelir; yalnızca
-        konu başlıkları kısa tutulur. Her kitap sayfası ayrı slayttır. MatKeys:
-        kapak, başlık, içerik, kapanış.
+        Kitap PDF’ini yükleyin, üniteyi seçin. Soru kitaptan alınır, şıklar
+        altına yazılır; cümleler değiştirilmez. Her soru ayrı slayttır.
       </p>
 
       <section className="files-panel slayt-files">
@@ -255,15 +233,18 @@ export default function SlaytPage({ active }: Props) {
               <>
                 <img className="mk-bg" src={contentUrl} alt="" />
                 <p className="mk-head">{headerTitle(deck, current)}</p>
-                {preview ? (
-                  <img
-                    className="mk-page"
-                    src={preview}
-                    alt={`${current.label}, sayfa ${current.page}`}
-                  />
-                ) : (
-                  <p className="mk-wait">Sayfa yükleniyor…</p>
-                )}
+                <div className="mk-card">
+                  <p className="mk-prompt">{current.prompt}</p>
+                  {current.choices.length ? (
+                    <ul
+                      className={`mk-choices cols-${current.choices.length > 3 ? 2 : 1}`}
+                    >
+                      {current.choices.map((choice) => (
+                        <li key={choice}>{choice}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
               </>
             ) : null}
           </div>
@@ -272,8 +253,8 @@ export default function SlaytPage({ active }: Props) {
         <section className="empty-home">
           <h2>Ünite slaytı yok</h2>
           <p>
-            PDF yükleyip üniteyi seçin. 5. temadaki MatKeys slaytlarıyla aynı
-            düzende, kitaptan görselleri burada görün; beğenirseniz indirin.
+            PDF yükleyip üniteyi seçin. Sorular kitaptan birebir alınır, slaytta
+            düzenli yazılır; beğenirseniz PowerPoint indirin.
           </p>
         </section>
       )}

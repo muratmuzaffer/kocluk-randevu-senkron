@@ -2,7 +2,6 @@ import PptxGenJS from 'pptxgenjs'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import {
   CANONICAL_TITLES,
-  renderPageDataUrl,
   type Deck,
   type DeckSlide,
 } from './pdfSlides'
@@ -66,6 +65,56 @@ function addSectionTitle(slide: PptxGenJS.Slide, title: string) {
   })
 }
 
+function addCard(slide: PptxGenJS.Slide, prompt: string, choices: string[]) {
+  const promptSize = prompt.length > 220 ? 20 : prompt.length > 140 ? 24 : 28
+  slide.addText(prompt, {
+    x: 0.55,
+    y: 1.15,
+    w: 18.9,
+    h: choices.length ? 3.4 : 8.8,
+    fontFace: 'Calibri',
+    fontSize: promptSize,
+    bold: true,
+    color: '1A1A1A',
+    valign: 'top',
+    margin: 0,
+  })
+  if (!choices.length) return
+  const colors = ['5170FF', '54A03A', 'ED7D31', '2E75B6']
+  const cols = choices.length <= 3 ? 1 : 2
+  const rows = Math.ceil(choices.length / cols)
+  const gap = 0.22
+  const boxW = cols === 1 ? 18.9 : (18.9 - gap) / 2
+  const boxH = Math.min(2.15, (5.3 - gap * (rows - 1)) / rows)
+  choices.forEach((choice, i) => {
+    const col = cols === 1 ? 0 : i % 2
+    const row = cols === 1 ? i : Math.floor(i / 2)
+    const x = 0.55 + col * (boxW + gap)
+    const y = 4.7 + row * (boxH + gap)
+    slide.addShape('roundRect', {
+      x,
+      y,
+      w: boxW,
+      h: boxH,
+      fill: { color: 'F7F9FC' },
+      line: { color: colors[i % colors.length], width: 2.5 },
+      rectRadius: 0.12,
+    })
+    slide.addText(choice, {
+      x: x + 0.2,
+      y: y + 0.12,
+      w: boxW - 0.4,
+      h: boxH - 0.24,
+      fontFace: 'Calibri',
+      fontSize: choice.length > 80 ? 16 : 20,
+      bold: true,
+      color: '1A1A1A',
+      valign: 'middle',
+      margin: 0,
+    })
+  })
+}
+
 function addHeaderLabel(slide: PptxGenJS.Slide, title: string) {
   const size = title.length > 28 ? 26 : 32
   slide.addText(title, {
@@ -111,7 +160,7 @@ export function previewAt(deck: Deck, index: number) {
 }
 
 export async function downloadUnitPptx(
-  pdf: PDFDocumentProxy,
+  _pdf: PDFDocumentProxy,
   deck: Deck,
   onProgress?: (done: number, total: number) => void,
 ) {
@@ -145,15 +194,7 @@ export async function downloadUnitPptx(
     } else {
       addBackground(slide, contentBg)
       addHeaderLabel(slide, headerTitle(deck, item))
-      const data = await renderPageDataUrl(pdf, item.page, 2.35, true)
-      slide.addImage({
-        data,
-        x: 0.32,
-        y: 1.02,
-        w: 19.36,
-        h: 9.22,
-        sizing: { type: 'contain', w: 19.36, h: 9.22 },
-      })
+      addCard(slide, item.prompt, item.choices)
     }
     onProgress?.(i + 1, total)
   }

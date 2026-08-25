@@ -34,9 +34,24 @@ export async function extractPageTexts(
   for (let i = 1; i <= total; i++) {
     const page = await pdf.getPage(i)
     const content = await page.getTextContent()
-    const text = content.items
-      .map((item) => ('str' in item ? item.str : ''))
-      .join(' ')
+    const lines: { y: number; bits: { x: number; str: string }[] }[] = []
+    for (const item of content.items) {
+      if (!('str' in item) || !item.str) continue
+      const x = item.transform[4]
+      const y = Math.round(item.transform[5])
+      const last = lines[lines.length - 1]
+      if (last && Math.abs(last.y - y) <= 3) last.bits.push({ x, str: item.str })
+      else lines.push({ y, bits: [{ x, str: item.str }] })
+    }
+    lines.sort((a, b) => b.y - a.y)
+    const text = lines
+      .map((line) =>
+        line.bits
+          .sort((a, b) => a.x - b.x)
+          .map((b) => b.str)
+          .join(' '),
+      )
+      .join('\n')
     texts.push(text)
     onProgress?.(i, total)
   }

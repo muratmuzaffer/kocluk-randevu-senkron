@@ -252,6 +252,10 @@ function isChromeLine(line: string) {
   return isHeaderNoise(line)
 }
 
+export function skipBookLine(line: string) {
+  return isChromeLine(line)
+}
+
 function markerOf(
   line: string,
 ): 'example' | 'activity' | 'step' | 'question' | 'choice' | 'heading' | 'body' {

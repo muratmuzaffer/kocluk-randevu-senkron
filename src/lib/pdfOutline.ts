@@ -1,4 +1,5 @@
-import { isOcrJunkPage, parseCards, stringModel, type PageModel } from './bookCards'
+import { isOcrJunkPage, stringModel, type PageModel } from './bookCards'
+import { cropBands } from './cropBands'
 
 export type PageKind = 'kapak' | 'hazir' | 'basla' | 'giris' | 'soru'
 
@@ -23,7 +24,7 @@ export type DeckSlide = {
   bullets: string[]
   parts: string[]
   pill: string
-  layout: 'prose' | 'steps' | 'example' | 'mcq' | 'open' | 'math'
+  layout: 'prose' | 'steps' | 'example' | 'mcq' | 'open' | 'math' | 'crop'
   figureRole?: 'side' | 'hero'
   figureTop?: number
   figureBottom?: number
@@ -271,7 +272,16 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
   const slides: DeckSlide[] = []
   let heading = unit.title
   let kind: PageKind = 'giris'
-  let olcmeStarted = false
+
+  const blank = {
+    prompt: '',
+    choices: [] as string[],
+    bullets: [] as string[],
+    parts: [] as string[],
+    pill: '',
+    layout: 'crop' as const,
+    figureRole: 'hero' as const,
+  }
 
   const pushTitle = (nextKind: PageKind, nextHeading: string) => {
     slides.push({
@@ -280,15 +290,39 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
       label: nextHeading,
       heading: nextHeading,
       face: 'title',
-      prompt: '',
-      choices: [],
-      bullets: [],
-      parts: [],
-      pill: '',
+      ...blank,
       layout: 'prose',
+      figureRole: undefined,
     })
   }
 
+  const pushCrop = (
+    page: number,
+    nextKind: PageKind,
+    nextHeading: string,
+    top: number,
+    bottom: number,
+  ) => {
+    slides.push({
+      kind: nextKind,
+      page,
+      label: KIND_LABEL[nextKind],
+      heading: nextHeading,
+      face: 'card',
+      ...blank,
+      figureTop: top,
+      figureBottom: bottom,
+    })
+  }
+
+  const chunks: {
+    page: number
+    kind: PageKind
+    heading: string
+    bands: { top: number; bottom: number }[]
+  }[] = []
+
+  let olcmeStarted = false
   for (let page = unit.start; page <= unit.end; page++) {
     const text = texts[page - 1] || ''
     if (isJunkPage(text)) continue
@@ -297,55 +331,38 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
     const next = olcmeStarted
       ? { kind: 'soru' as const, heading: 'ÖLÇME VE DEĞERLENDİRME' }
       : classify(text, heading)
-    if (next.heading !== heading || slides.length === 0) {
-      heading = next.heading
-      kind = next.kind
-      if (heading !== unit.title) pushTitle(kind, heading)
+    heading = next.heading
+    kind = next.kind
+    const bands = cropBands(models[page - 1])
+    if (!bands.length) continue
+    chunks.push({
+      page,
+      kind,
+      heading,
+      bands: bands.map((b) => ({ top: b.top, bottom: b.bottom })),
+    })
+  }
+
+  const body = chunks.filter((c) => c.kind !== 'soru')
+  const olcme = chunks.filter((c) => c.kind === 'soru')
+  let current = unit.title
+  for (const chunk of [...body, ...olcme]) {
+    if (chunk.heading !== current) {
+      current = chunk.heading
+      if (current !== unit.title) pushTitle(chunk.kind, current)
     }
-    const cards = parseCards(text, models[page - 1])
-    if (cards.length === 0) continue
-    for (const card of cards) {
-      slides.push({
-        kind,
-        page,
-        label: KIND_LABEL[kind],
-        heading,
-        face: 'card',
-        prompt: card.prompt,
-        choices: card.choices,
-        bullets: card.bullets,
-        parts: card.parts,
-        pill: card.pill,
-        layout: card.layout,
-        figureRole: card.figureRole,
-        figureTop: card.figureTop,
-        figureBottom: card.figureBottom,
-      })
+    for (const band of chunk.bands) {
+      pushCrop(chunk.page, chunk.kind, chunk.heading, band.top, band.bottom)
     }
   }
 
   if (slides.length === 0) {
-    const fallback = [...Array(unit.end - unit.start + 1)].map((_, i) => unit.start + i)
+    const fallback = [...Array(unit.end - unit.start + 1)]
+      .map((_, i) => unit.start + i)
       .find((p) => !isJunkPage(texts[p - 1] || ''))
     if (fallback) {
-      const card = parseCards(texts[fallback - 1] || '', models[fallback - 1])[0]
       pushTitle('giris', unit.title)
-      slides.push({
-        kind: 'giris',
-        page: fallback,
-        label: KIND_LABEL.giris,
-        heading: unit.title,
-        face: 'card',
-        prompt: card?.prompt || unit.title,
-        choices: card?.choices || [],
-        bullets: card?.bullets || [],
-        parts: card?.parts || [],
-        pill: card?.pill || '',
-        layout: card?.layout || 'prose',
-        figureRole: card?.figureRole,
-        figureTop: card?.figureTop,
-        figureBottom: card?.figureBottom,
-      })
+      pushCrop(fallback, 'giris', unit.title, 0.08, 0.9)
     }
   }
 

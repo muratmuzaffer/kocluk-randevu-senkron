@@ -69,6 +69,17 @@ function addSectionTitle(slide: PptxGenJS.Slide, title: string) {
 
 function addCard(slide: PptxGenJS.Slide, item: DeckSlide, figureData?: string) {
   const hasFigure = Boolean(figureData)
+  if ((item.layout === 'crop' || (!item.prompt && !item.choices.length && !item.parts.length && !item.bullets.length)) && figureData) {
+    slide.addImage({
+      data: figureData,
+      x: 0.42,
+      y: 1.05,
+      w: 19.16,
+      h: 9.05,
+      sizing: { type: 'contain', w: 19.16, h: 9.05 },
+    })
+    return
+  }
   const hero = item.figureRole === 'hero' || item.layout === 'math'
   const layout = item.layout || (item.choices.length ? 'mcq' : item.parts.length ? 'open' : item.bullets.length ? 'steps' : item.pill ? 'example' : 'prose')
 

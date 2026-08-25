@@ -1,4 +1,5 @@
-import { parseCards, tidyBook } from '../src/lib/bookCards.ts'
+import { parseCards, stringModel, tidyBook } from '../src/lib/bookCards.ts'
+import { cropBands, isLongQuestion } from '../src/lib/cropBands.ts'
 import { blendDeck, findUnits } from '../src/lib/pdfOutline.ts'
 
 function assert(cond: unknown, msg: string) {
@@ -141,21 +142,19 @@ assert(seven?.title === 'OLASILIK', `7 short ${seven?.title}`)
 const deck = blendDeck(six!, pages)
 const cards = deck.slides.filter((s) => s.face === 'card')
 assert(
-  cards.some((s) => s.page === 116 && s.choices.length === 4),
-  'basla choices',
+  cards.some((s) => s.page === 116 && s.layout === 'crop' && s.figureTop != null),
+  'basla crop',
 )
 assert(
-  cards.filter((s) => s.page === 160).length === 2,
-  `two questions on 160: ${cards.filter((s) => s.page === 160).length}`,
+  cards.filter((s) => s.page === 160).length >= 1,
+  `olcme on 160: ${cards.filter((s) => s.page === 160).length}`,
 )
 assert(
-  cards.some((s) => s.prompt.includes('Remzi eşitliği korumak')),
-  'verbatim remzi',
+  cards.every((s) => s.kind !== 'soru' || s.page >= 160),
+  'unit questions last',
 )
-assert(
-  cards.some((s) => s.choices.includes('A) Toplama')),
-  'verbatim choice',
-)
+const lastCard = cards[cards.length - 1]
+assert(lastCard?.kind === 'soru', `last ${lastCard?.kind}`)
 assert(
   !deck.slides.some((s) => s.page === 114),
   'skip opener junk',
@@ -168,10 +167,25 @@ assert(
   deck.slides.every((s) => !/karekodu/i.test(s.heading + s.prompt)),
   'no junk heading',
 )
+assert(
+  isLongQuestion(
+    `1) ${'neden '.repeat(80)}hangisidir? a) Birinci uzun açıklama burada durur b) İkinci uzun açıklama da burada durur`,
+  ),
+  'long q',
+)
+assert(!isLongQuestion('1) Sonuç nedir? A) 8 B) 12 C) 16 D) 20'), 'short q')
+assert(
+  cropBands(
+    stringModel(
+      `1) ${'kelime '.repeat(90)}nedir? a) birinci uzun seçenek cümlesi b) ikinci uzun seçenek cümlesi`,
+    ),
+  ).length === 0,
+  'skip long crop',
+)
 console.log('ok', units.map((u) => `${u.number}:${u.start}-${u.end}:${u.title}`).join(' | '))
 console.log(
   cards
     .filter((s) => [116, 117, 118, 131, 139, 150, 160].includes(s.page))
-    .map((s) => `${s.page}:${s.choices.length}c`)
+    .map((s) => `${s.page}:${s.kind}`)
     .join(','),
 )

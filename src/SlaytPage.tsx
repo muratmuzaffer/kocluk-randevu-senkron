@@ -155,9 +155,9 @@ export default function SlaytPage({ active }: Props) {
   return (
     <div className="slayt-pane">
       <p className="slayt-lead">
-        Kitap PDF’ini yükleyin, üniteyi seçin. Metin ve görseller kitaptan alınır;
-        işlemler kitaptan kesilir. Soru tipi (çoktan seçmeli, açık uçlu, adım)
-        ayrı düzenlenir.
+        Kitap PDF’ini yükleyin, üniteyi seçin. Konu başlıkları slayta yazılır;
+        içerik kitaptan kırpılıp yapıştırılır. Uzun sorular alınmaz; ünite
+        soruları en sonda durur.
       </p>
 
       <section className="files-panel slayt-files">
@@ -266,6 +266,13 @@ export default function SlaytPage({ active }: Props) {
               <>
                 <img className="mk-bg" src={contentUrl} alt="" />
                 <p className="mk-head">{headerTitle(deck, current)}</p>
+                {current.layout === 'crop' || (!current.prompt && figure) ? (
+                  figure ? (
+                    <img className="mk-crop" src={figure} alt="" />
+                  ) : (
+                    <p className="mk-wait">Kitap kırpılıyor…</p>
+                  )
+                ) : (
                 <div
                   className={`mk-card layout-${current.layout || 'prose'} ${
                     figure
@@ -342,6 +349,7 @@ export default function SlaytPage({ active }: Props) {
                     ) : null}
                   </div>
                 </div>
+                )}
               </>
             ) : null}
           </div>
@@ -350,8 +358,8 @@ export default function SlaytPage({ active }: Props) {
         <section className="empty-home">
           <h2>Ünite slaytı yok</h2>
           <p>
-            PDF yükleyip üniteyi seçin. Kitap cümleleri ve görselleri slaytta
-            düzenli görünür; beğenirseniz PowerPoint indirin.
+            PDF yükleyip üniteyi seçin. Kitap sırası korunur; kırpılan parçalar
+            slayta yapıştırılır. Beğenirseniz PowerPoint indirin.
           </p>
         </section>
       )}

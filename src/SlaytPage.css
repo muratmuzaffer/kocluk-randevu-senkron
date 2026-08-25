@@ -121,14 +121,15 @@
   letter-spacing: 0.02em;
 }
 
-.mk-page {
+.mk-crop {
   position: absolute;
-  left: 1.6%;
-  top: 9.1%;
-  width: 96.8%;
-  height: 82%;
+  left: 2.1%;
+  top: 9.4%;
+  width: 95.8%;
+  height: 80.4%;
   object-fit: contain;
   object-position: center;
+  background: transparent;
 }
 
 .mk-card {

@@ -11,7 +11,12 @@ export type {
   PageKind,
   Unit,
 } from './pdfOutline'
-export { blendDeck, findUnits, kindCounts } from './pdfOutline'
+export {
+  blendDeck,
+  CANONICAL_TITLES,
+  findUnits,
+  kindCounts,
+} from './pdfOutline'
 
 GlobalWorkerOptions.workerSrc = workerSrc
 

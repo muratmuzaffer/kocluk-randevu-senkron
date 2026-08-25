@@ -59,7 +59,7 @@ export default function SlaytPage({ active }: Props) {
   }, [deck, active])
 
   useEffect(() => {
-    if (!deck || !current || !pdfRef.current) {
+    if (!deck || !current || !pdfRef.current || current.mode === 'text') {
       setPreview('')
       return
     }
@@ -139,8 +139,9 @@ export default function SlaytPage({ active }: Props) {
   return (
     <div className="slayt-pane">
       <p className="slayt-lead">
-        Kitap PDF’ini yükleyin, üniteyi seçin. Önizleme ve indirme MatKeys
-        formatındadır: kapak, başlık slaydı, kitaptaki sayfalar, kapanış.
+        Kitap PDF’ini yükleyin, üniteyi seçin. Saçma cümleler ayıklanır, ünite
+        harmanlanır. Önizleme MatKeys formatındadır: kapak, başlık, içerik,
+        kapanış.
       </p>
 
       <section className="files-panel slayt-files">
@@ -216,7 +217,7 @@ export default function SlaytPage({ active }: Props) {
             </button>
             <p>
               {index + 1} / {total} · {view.label}
-              {current ? ` · s. ${current.page}` : ''}
+              {current?.heading ? ` · ${current.heading}` : ''}
             </p>
             <button
               type="button"
@@ -248,8 +249,14 @@ export default function SlaytPage({ active }: Props) {
             {view.role === 'content' && current ? (
               <>
                 <img className="mk-bg" src={contentUrl} alt="" />
-                <p className="mk-head">{headerTitle(deck, current.kind)}</p>
-                {preview ? (
+                <p className="mk-head">{headerTitle(deck, current)}</p>
+                {current.mode === 'text' && current.bullets.length ? (
+                  <ul className="mk-body">
+                    {current.bullets.map((bit) => (
+                      <li key={bit}>{bit}</li>
+                    ))}
+                  </ul>
+                ) : preview ? (
                   <img
                     className="mk-page"
                     src={preview}
@@ -266,8 +273,8 @@ export default function SlaytPage({ active }: Props) {
         <section className="empty-home">
           <h2>Ünite slaytı yok</h2>
           <p>
-            PDF yükleyip üniteyi seçin. MatKeys kapağını, başlığı ve içerik
-            slaytlarını burada görün; beğenirseniz PowerPoint indirin.
+            PDF yükleyip üniteyi seçin. Harmanlanmış MatKeys slaytını burada
+            görün; beğenirseniz PowerPoint indirin.
           </p>
         </section>
       )}

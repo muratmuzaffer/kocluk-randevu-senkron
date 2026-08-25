@@ -131,6 +131,27 @@
   object-position: center;
 }
 
+.mk-body {
+  position: absolute;
+  left: 3%;
+  top: 12%;
+  width: 94%;
+  height: 76%;
+  margin: 0;
+  padding: 0.4rem 1.2rem 0.4rem 2rem;
+  overflow: hidden;
+  list-style: disc;
+  color: #1a1a1a;
+  font-family: Calibri, 'Segoe UI', sans-serif;
+  font-size: clamp(0.85rem, 1.7vw, 1.45rem);
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.mk-body li {
+  margin: 0 0 0.55rem;
+}
+
 .mk-wait {
   position: absolute;
   inset: 20% 10% 10%;

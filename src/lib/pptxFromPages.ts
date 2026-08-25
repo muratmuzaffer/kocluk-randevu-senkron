@@ -1,7 +1,11 @@
 import PptxGenJS from 'pptxgenjs'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import type { Deck, PageKind } from './pdfSlides'
-import { renderPageDataUrl } from './pdfSlides'
+import {
+  CANONICAL_TITLES,
+  renderPageDataUrl,
+  type Deck,
+  type DeckSlide,
+} from './pdfSlides'
 import coverUrl from '../assets/matkeys/cover.jpg'
 import titleUrl from '../assets/matkeys/title.png'
 import contentUrl from '../assets/matkeys/content.jpg'
@@ -9,7 +13,7 @@ import contentUrl from '../assets/matkeys/content.jpg'
 const W = 20
 const H = 11.25
 
-const HEADER: Record<PageKind, string> = {
+const KIND_HEADER: Record<DeckSlide['kind'], string> = {
   kapak: '',
   hazir: 'HAZIR MIYIZ?',
   basla: 'BAŞLAYALIM',
@@ -31,11 +35,39 @@ async function urlToData(url: string): Promise<string> {
 export { coverUrl, titleUrl, contentUrl }
 
 export function unitTitle(deck: Deck) {
-  return deck.unit.title.replace(/\s+/g, ' ').trim().toLocaleUpperCase('tr-TR')
+  const raw = deck.unit.title.replace(/\s+/g, ' ').trim().toLocaleUpperCase('tr-TR')
+  if (/KAREKODU|ÖZET İÇERİĞE|OZET ICERIGE|BU TEMADA/i.test(raw) || raw.length < 8) {
+    return CANONICAL_TITLES[deck.unit.number] || `${deck.unit.number}. TEMA`
+  }
+  return raw
 }
 
-export function headerTitle(deck: Deck, kind: PageKind) {
-  return HEADER[kind] || unitTitle(deck)
+export function headerTitle(deck: Deck, slide: DeckSlide) {
+  return KIND_HEADER[slide.kind] || slide.heading || unitTitle(deck)
+}
+
+function addBullets(slide: PptxGenJS.Slide, bullets: string[]) {
+  slide.addText(
+    bullets.map((bit) => ({
+      text: bit,
+      options: {
+        bullet: true,
+        breakLine: true,
+        fontFace: 'Calibri',
+        fontSize: bit.length > 110 ? 20 : 24,
+        bold: false,
+        color: '1A1A1A',
+      },
+    })),
+    {
+      x: 0.55,
+      y: 1.15,
+      w: 18.9,
+      h: 8.85,
+      valign: 'top',
+      paraSpaceAfter: 10,
+    },
+  )
 }
 
 function fileName(deck: Deck) {
@@ -129,18 +161,22 @@ export async function downloadUnitPptx(
   const total = deck.slides.length
   for (let i = 0; i < deck.slides.length; i++) {
     const item = deck.slides[i]
-    const data = await renderPageDataUrl(pdf, item.page, 2.35, true)
     const slide = pres.addSlide()
     addBackground(slide, contentBg)
-    addHeaderLabel(slide, headerTitle(deck, item.kind))
-    slide.addImage({
-      data,
-      x: 0.32,
-      y: 1.02,
-      w: 19.36,
-      h: 9.22,
-      sizing: { type: 'contain', w: 19.36, h: 9.22 },
-    })
+    addHeaderLabel(slide, headerTitle(deck, item))
+    if (item.mode === 'text' && item.bullets.length) {
+      addBullets(slide, item.bullets)
+    } else {
+      const data = await renderPageDataUrl(pdf, item.page, 2.35, true)
+      slide.addImage({
+        data,
+        x: 0.32,
+        y: 1.02,
+        w: 19.36,
+        h: 9.22,
+        sizing: { type: 'contain', w: 19.36, h: 9.22 },
+      })
+    }
     onProgress?.(i + 1, total)
   }
 

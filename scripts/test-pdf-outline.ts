@@ -1,5 +1,5 @@
 import { parseCards, stringModel, tidyBook } from '../src/lib/bookCards.ts'
-import { cropBands, isLongQuestion } from '../src/lib/cropBands.ts'
+import { cropBands, isDecorPage, isLongQuestion } from '../src/lib/cropBands.ts'
 import { blendDeck, findUnits } from '../src/lib/pdfOutline.ts'
 
 function assert(cond: unknown, msg: string) {
@@ -122,6 +122,9 @@ pages[149] = 'TEMEL ARİTMETİK İŞLEMLER VE ALGORİTMA Ayşe ayran tarifini ad
 pages[159] =
   'İŞLEMLERLE CEBİRSEL DÜŞÜNME 160 ÖLÇME VE DEĞERLENDİRME SORULARI 1) Remzi eşitliği korumak için hangi işlemi yapmalıdır? A) Toplama B) Çıkarma C) Çarpma D) Bölme 2) İşlem önceliğine göre sonuç nedir? A) 8 B) 12 C) 16 D) 20'
 pages[160] = '6.TEMA 161 a) Oğuz daireleri boyarken hangi kuralı kullanır?'
+pages[161] =
+  'EKLER EK-1 ÖZ DEĞERLENDİRME FORMU Öğrenci Adı Soyadı Bu etkinlikte neler öğrendim?'
+pages[162] = 'TÜRK DÜNYASI HARİTASI İYİ (3 Puan) ORTA (2 Puan) KÖTÜ (1 Puan)'
 pages[163] =
   'Çok 2 1 asla mümkün büyük VERİDEN OLASILIĞA 7. TEMA Karekodu okutarak özet içeriğe ulaşabilirsiniz.'
 
@@ -156,6 +159,10 @@ assert(
 const lastCard = cards[cards.length - 1]
 assert(lastCard?.kind === 'soru', `last ${lastCard?.kind}`)
 assert(
+  !deck.slides.some((s) => s.page === 162 || s.page === 163),
+  'skip appendix and map',
+)
+assert(
   !deck.slides.some((s) => s.page === 114),
   'skip opener junk',
 )
@@ -168,8 +175,8 @@ assert(
   'fewer intro slides',
 )
 assert(
-  cards.some((s) => s.figureTop2 != null),
-  'side by side crop',
+  cards.filter((s) => s.face === 'card').every((s) => s.figureTop != null && s.figureTop2 == null),
+  'one full page per slide',
 )
 assert(
   isLongQuestion(
@@ -183,8 +190,24 @@ assert(
     stringModel(
       `1) ${'kelime '.repeat(90)}nedir? a) birinci uzun seçenek cümlesi b) ikinci uzun seçenek cümlesi`,
     ),
-  ).length === 0,
-  'skip long crop',
+  ).length >= 1,
+  'long page still cropped',
+)
+assert(
+  cropBands(stringModel('KESİRLER 4. TEMA')).length === 0,
+  'skip empty photo',
+)
+assert(isDecorPage('KESİRLER 4. TEMA'), 'decor title')
+assert(isDecorPage('KESİRLER 1 1/2 1/3 1/4 1/5 1/6'), 'decor fraction art')
+assert(
+  !isDecorPage('BAŞLAYALIM 1) Aşağıdaki soruları cevaplayınız. A) 3 B) 5 C) 7 D) 9'),
+  'keep basla exercise',
+)
+assert(
+  cropBands(
+    stringModel('BAŞLAYALIM 1) Aşağıdaki soruları cevaplayınız. A) 3 B) 5 C) 7 D) 9'),
+  ).length >= 1,
+  'basla band',
 )
 console.log('ok', units.map((u) => `${u.number}:${u.start}-${u.end}:${u.title}`).join(' | '))
 console.log(

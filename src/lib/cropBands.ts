@@ -12,8 +12,9 @@ export type PageCrop = {
   right?: { top: number; bottom: number }
 }
 
+const HEADER = 0.045
+const FOOTER = 0.945
 const LONG_Q = 480
-const SPLIT_AT = 0.42
 
 function fold(text: string) {
   return text
@@ -40,6 +41,30 @@ function looksLikeQuestion(text: string) {
     t.includes('NEDIR') ||
     /[A-D]\s*\)/.test(text)
   )
+}
+
+export function isDecorPage(text: string) {
+  const t = tidyBook(text)
+  const folded = fold(t)
+  if (/ORNEK\s*\d+|ETKINLIK\s*\d+|\d+\s*[.)]\s*ADIM/.test(folded)) return false
+  if (looksLikeQuestion(t)) return false
+  if (/\d+\s*\)\s+\S/.test(t)) return false
+  if (/\d\s*(?:\+|×|÷|=|-)\s*\d/.test(t)) return false
+  const body = folded
+    .replace(/KAREKODU[\s\S]{0,80}(ULASABILIRSINIZ|ULAŞABİLİRSİNİZ)/g, ' ')
+    .replace(/\d+\s*\.\s*TEMA/g, ' ')
+    .replace(/HAZIR MIYIZ|BASLAYALIM/g, ' ')
+    .replace(/ISTATISTIKSEL ARASTIRMA( SURECI)?/g, ' ')
+    .replace(/ISLEMLERLE CEBIRSEL DUSUNME/g, ' ')
+    .replace(/SAYILAR VE NICELIKLER \(2\): KESIRLER/g, ' ')
+    .replace(/\bKESIRLER\b/g, ' ')
+    .replace(/VERIDEN OLASILIGA/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const letters = (body.match(/[A-Z]/g) || []).length
+  if (letters < 40) return true
+  if (body.length < 48) return true
+  return false
 }
 
 export function isLongQuestion(text: string) {
@@ -80,62 +105,13 @@ function visualLines(model: PageModel): PageLine[] {
     .filter((l) => l.text && !isEdgeChrome(l.text))
 }
 
-function bandOf(model: PageModel, lines: PageLine[], pad = 0.028) {
-  if (!lines.length) return null
-  const h = model.height || 1
-  const yMax = Math.max(...lines.map((l) => l.y + l.h))
-  const yMin = Math.min(...lines.map((l) => l.y))
-  let top = Math.max(0.06, (h - yMax - h * pad) / h)
-  let bottom = Math.min(0.94, (h - yMin + h * pad * 1.35) / h)
-  if (bottom - top < 0.16) {
-    const extra = (0.16 - (bottom - top)) / 2
-    top = Math.max(0.06, top - extra)
-    bottom = Math.min(0.94, bottom + extra)
-  }
-  if (bottom - top < 0.05) return null
-  return { top, bottom }
-}
-
-function bestSplit(
-  model: PageModel,
-  lines: PageLine[],
-  box: { top: number; bottom: number },
-) {
-  const h = model.height || 1
-  const mid = box.top + (box.bottom - box.top) * 0.5
-  let best = mid
-  let bestGap = 0
-  for (let i = 0; i < lines.length - 1; i++) {
-    const upper = lines[i]
-    const lower = lines[i + 1]
-    const gap = upper.y - upper.h - lower.y
-    const split = (h - lower.y - lower.h / 2) / h
-    const lo = box.top + (box.bottom - box.top) * 0.32
-    const hi = box.top + (box.bottom - box.top) * 0.68
-    if (split < lo || split > hi) continue
-    if (gap > bestGap) {
-      bestGap = gap
-      best = (h - (lower.y + (upper.y - upper.h - lower.y) / 2)) / h
-    }
-  }
-  return Math.min(box.bottom - 0.08, Math.max(box.top + 0.08, best))
-}
-
 export function pageCrop(model: PageModel): PageCrop | null {
+  if (isDecorPage(model.text)) return null
   const lines = visualLines(model)
-  if (!lines.length) return null
-  const text = tidyBook(lines.map((l) => l.text).join(' '))
-  if (!text || text.length < 8) return null
-  if (isLongQuestion(text) && text.length > 420) return null
-  const box = bandOf(model, lines)
-  if (!box) return null
-  if (box.bottom - box.top <= SPLIT_AT) return { text, left: box }
-  const split = bestSplit(model, lines, box)
-  return {
-    text,
-    left: { top: box.top, bottom: split },
-    right: { top: split, bottom: box.bottom },
-  }
+  const text = tidyBook((lines.length ? lines : model.lines).map((l) => l.text).join(' ') || model.text)
+  if (isDecorPage(text)) return null
+  if (!text || text.replace(/\s+/g, '').length < 8) return null
+  return { text, left: { top: HEADER, bottom: FOOTER } }
 }
 
 export function cropBands(model: PageModel): CropBand[] {

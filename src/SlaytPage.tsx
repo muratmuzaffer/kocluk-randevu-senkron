@@ -7,6 +7,7 @@ import {
   kindCounts,
   loadPdf,
   renderBandDataUrl,
+  renderPageDataUrl,
   type Deck,
   type PageModel,
   type Unit,
@@ -66,6 +67,17 @@ export default function SlaytPage({ active }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [deck, active])
 
+  const cropKey = current
+    ? [
+        current.page,
+        current.figureTop,
+        current.figureBottom,
+        current.page2 ?? '',
+        current.figureTop2 ?? '',
+        current.figureBottom2 ?? '',
+      ].join(':')
+    : ''
+
   useEffect(() => {
     if (
       !current ||
@@ -79,33 +91,35 @@ export default function SlaytPage({ active }: Props) {
     }
     let cancelled = false
     const pdf = pdfRef.current
-    renderBandDataUrl(pdf, current.page, current.figureTop, current.figureBottom)
-      .then((url) => {
-        if (!cancelled) setFigure(url)
+    const page = current.page
+    const top = current.figureTop
+    const bottom = current.figureBottom
+    const page2 = current.page2 || current.page
+    const top2 = current.figureTop2
+    const bottom2 = current.figureBottom2
+
+    async function cropOne(p: number, t: number, b: number) {
+      try {
+        return await renderBandDataUrl(pdf, p, t, b)
+      } catch {
+        return renderPageDataUrl(pdf, p, 1.35, true)
+      }
+    }
+
+    void cropOne(page, top, bottom).then((url) => {
+      if (!cancelled) setFigure(url)
+    })
+    if (top2 != null && bottom2 != null) {
+      void cropOne(page2, top2, bottom2).then((url) => {
+        if (!cancelled) setFigure2(url)
       })
-      .catch(() => {
-        if (!cancelled) setFigure('')
-      })
-    if (current.figureTop2 != null && current.figureBottom2 != null) {
-      renderBandDataUrl(
-        pdf,
-        current.page2 || current.page,
-        current.figureTop2,
-        current.figureBottom2,
-      )
-        .then((url) => {
-          if (!cancelled) setFigure2(url)
-        })
-        .catch(() => {
-          if (!cancelled) setFigure2('')
-        })
     } else {
       setFigure2('')
     }
     return () => {
       cancelled = true
     }
-  }, [current])
+  }, [cropKey, current])
 
   async function onFile(file: File) {
     setError('')
@@ -283,12 +297,14 @@ export default function SlaytPage({ active }: Props) {
                 {current.layout === 'crop' || (!current.prompt && figure) ? (
                   figure ? (
                     figure2 ? (
-                      <div className="mk-pair">
+                      <div className="mk-well mk-pair">
                         <img src={figure} alt="" />
                         <img src={figure2} alt="" />
                       </div>
                     ) : (
-                      <img className="mk-crop" src={figure} alt="" />
+                      <div className="mk-well">
+                        <img src={figure} alt="" />
+                      </div>
                     )
                   ) : (
                     <p className="mk-wait">Kitap kırpılıyor…</p>

@@ -1,5 +1,5 @@
 import { isOcrJunkPage, stringModel, type PageModel } from './bookCards'
-import { pageCrop } from './cropBands'
+import { isDecorPage, pageCrop } from './cropBands'
 
 export type PageKind = 'kapak' | 'hazir' | 'basla' | 'giris' | 'soru'
 
@@ -125,9 +125,32 @@ function isJunkTitle(text: string) {
   return false
 }
 
+function isEndMatterPage(text: string) {
+  const t = fold(text)
+  if (t.includes('SOZLUK')) return true
+  if (t.includes('KAYNAKCA')) return true
+  if (t.includes('YARARLANILAN KAYNAK')) return true
+  if (t.includes('CEVAP ANAHTARI')) return true
+  if (t.includes('DERS KITABININ CEVAP')) return true
+  if (t.includes('KAREKODU') && t.includes('CEVAP')) return true
+  if (/\bEKLER\b/.test(t) || /\bEK\s*[-–]?\s*\d/.test(t)) return true
+  if (t.includes('OZ DEGERLENDIRME')) return true
+  if (t.includes('OGRENCI ADI SOYADI')) return true
+  if (t.includes('TURK DUNYASI')) return true
+  if (t.includes('HARITASI')) return true
+  if (t.includes('FIZIKI HARITA') || t.includes('SIYASI HARITA')) return true
+  if (t.includes('IYI') && t.includes('ORTA') && t.includes('PUAN') && t.includes('KOTU')) {
+    return true
+  }
+  if ((t.match(/\b-\s*[A-Z]\s*-/g) || []).length >= 3) return true
+  return false
+}
+
 function isJunkPage(text: string) {
   if (isTocLike(text)) return true
   if (isOcrJunkPage(text)) return true
+  if (isEndMatterPage(text)) return true
+  if (isDecorPage(text)) return true
   const t = fold(text)
   if (t.includes('KAREKODU OKUTARAK')) return true
   if (t.includes('BU TEMADA') && t.includes('BEKLENMEKTEDIR')) return true
@@ -333,9 +356,11 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
 
   const chunks: Chunk[] = []
   let olcmeStarted = false
+  let appendixStarted = false
   for (let page = unit.start; page <= unit.end; page++) {
     const text = texts[page - 1] || ''
-    if (isJunkPage(text)) continue
+    if (isEndMatterPage(text)) appendixStarted = true
+    if (appendixStarted || isJunkPage(text)) continue
     const raw = rawKind(text)
     if (raw === 'olcme') olcmeStarted = true
     const next = olcmeStarted
@@ -354,27 +379,7 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
     })
   }
 
-  const packed: Chunk[] = []
-  for (let i = 0; i < chunks.length; i++) {
-    const cur = chunks[i]
-    const nxt = chunks[i + 1]
-    if (
-      !cur.right &&
-      nxt &&
-      !nxt.right &&
-      nxt.kind === cur.kind &&
-      nxt.heading === cur.heading
-    ) {
-      packed.push({
-        ...cur,
-        right: nxt.left,
-        page2: nxt.page,
-      })
-      i += 1
-      continue
-    }
-    packed.push(cur)
-  }
+  const packed = chunks
 
   const body = packed.filter((c) => c.kind !== 'soru')
   const olcme = packed.filter((c) => c.kind === 'soru')

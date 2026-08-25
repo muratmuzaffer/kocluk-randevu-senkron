@@ -3,7 +3,9 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { choiceBits, stepBits } from './bookCards'
 import {
   CANONICAL_TITLES,
-  renderBandDataUrl,
+  renderBandCrop,
+  renderPageCrop,
+  type CropImage,
   type Deck,
   type DeckSlide,
 } from './pdfSlides'
@@ -67,38 +69,48 @@ function addSectionTitle(slide: PptxGenJS.Slide, title: string) {
   })
 }
 
-function addCard(slide: PptxGenJS.Slide, item: DeckSlide, figureData?: string, figureData2?: string) {
-  const pair = Boolean(figureData && figureData2)
-  if ((item.layout === 'crop' || (!item.prompt && !item.choices.length)) && figureData) {
-    if (pair && figureData2) {
-      slide.addImage({
-        data: figureData,
-        x: 0.38,
-        y: 1.05,
-        w: 9.45,
-        h: 9.05,
-        sizing: { type: 'contain', w: 9.45, h: 9.05 },
-      })
-      slide.addImage({
-        data: figureData2,
-        x: 10.17,
-        y: 1.05,
-        w: 9.45,
-        h: 9.05,
-        sizing: { type: 'contain', w: 9.45, h: 9.05 },
-      })
+function fitContain(
+  box: { x: number; y: number; w: number; h: number },
+  image: CropImage,
+) {
+  if (!image.width || !image.height) return box
+  const aspect = image.width / image.height
+  const boxAspect = box.w / box.h
+  const w = aspect > boxAspect ? box.w : box.h * aspect
+  const h = aspect > boxAspect ? box.w / aspect : box.h
+  return {
+    x: box.x + (box.w - w) / 2,
+    y: box.y + (box.h - h) / 2,
+    w,
+    h,
+  }
+}
+
+function addFittedImage(slide: PptxGenJS.Slide, image: CropImage, box: { x: number; y: number; w: number; h: number }) {
+  const fit = fitContain(box, image)
+  slide.addImage({
+    data: image.data,
+    x: fit.x,
+    y: fit.y,
+    w: fit.w,
+    h: fit.h,
+  })
+}
+
+const WELL = { x: 0.39, y: 0.99, w: 19.22, h: 9.55 }
+
+function addCard(slide: PptxGenJS.Slide, item: DeckSlide, figure?: CropImage, figure2?: CropImage) {
+  const pair = Boolean(figure && figure2)
+  if ((item.layout === 'crop' || (!item.prompt && !item.choices.length)) && figure) {
+    if (pair && figure2) {
+      addFittedImage(slide, figure, { x: 0.39, y: 0.99, w: 9.5, h: 9.55 })
+      addFittedImage(slide, figure2, { x: 10.11, y: 0.99, w: 9.5, h: 9.55 })
       return
     }
-    slide.addImage({
-      data: figureData,
-      x: 0.42,
-      y: 1.05,
-      w: 19.16,
-      h: 9.05,
-      sizing: { type: 'contain', w: 19.16, h: 9.05 },
-    })
+    addFittedImage(slide, figure, WELL)
     return
   }
+  const figureData = figure?.data
   const hasFigure = Boolean(figureData)
   const hero = item.figureRole === 'hero' || item.layout === 'math'
   const layout = item.layout || (item.choices.length ? 'mcq' : item.parts.length ? 'open' : item.bullets.length ? 'steps' : item.pill ? 'example' : 'prose')
@@ -118,14 +130,14 @@ function addCard(slide: PptxGenJS.Slide, item: DeckSlide, figureData?: string, f
         margin: 0,
       })
     }
-    slide.addImage({
-      data: figureData,
-      x: 2.4,
-      y: item.prompt ? 2.7 : 1.35,
-      w: 15.2,
-      h: item.prompt ? 7.15 : 8.5,
-      sizing: { type: 'contain', w: 15.2, h: item.prompt ? 7.15 : 8.5 },
-    })
+    if (figure) {
+      addFittedImage(slide, figure, {
+        x: 2.4,
+        y: item.prompt ? 2.7 : 1.35,
+        w: 15.2,
+        h: item.prompt ? 7.15 : 8.5,
+      })
+    }
     return
   }
 
@@ -150,15 +162,8 @@ function addCard(slide: PptxGenJS.Slide, item: DeckSlide, figureData?: string, f
   const textW = hasFigure ? 9.25 : 18.9
   let y = 1.12
 
-  if (hasFigure && figureData) {
-    slide.addImage({
-      data: figureData,
-      x: 0.45,
-      y: 1.15,
-      w: 9.4,
-      h: 8.7,
-      sizing: { type: 'contain', w: 9.4, h: 8.7 },
-    })
+  if (figure) {
+    addFittedImage(slide, figure, { x: 0.45, y: 1.15, w: 9.4, h: 8.7 })
   }
 
   if (item.pill) {
@@ -437,33 +442,35 @@ export async function downloadUnitPptx(
     } else {
       addBackground(slide, contentBg)
       addHeaderLabel(slide, headerTitle(deck, item))
-      let figureData = ''
-      let figureData2 = ''
+      let figure: CropImage | undefined
+      let figure2: CropImage | undefined
       if (item.figureTop != null && item.figureBottom != null) {
         try {
-          figureData = await renderBandDataUrl(
+          figure = await renderBandCrop(
             pdf,
             item.page,
             item.figureTop,
             item.figureBottom,
+            1.9,
           )
         } catch {
-          figureData = ''
+          figure = await renderPageCrop(pdf, item.page, 1.35, true)
         }
       }
       if (item.figureTop2 != null && item.figureBottom2 != null) {
         try {
-          figureData2 = await renderBandDataUrl(
+          figure2 = await renderBandCrop(
             pdf,
             item.page2 || item.page,
             item.figureTop2,
             item.figureBottom2,
+            1.9,
           )
         } catch {
-          figureData2 = ''
+          figure2 = await renderPageCrop(pdf, item.page2 || item.page, 1.35, true)
         }
       }
-      addCard(slide, item, figureData, figureData2)
+      addCard(slide, item, figure, figure2)
     }
     onProgress?.(i + 1, total)
   }

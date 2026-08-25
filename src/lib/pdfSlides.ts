@@ -1,9 +1,10 @@
+import './mathSumPrecise'
 import {
   GlobalWorkerOptions,
   getDocument,
   type PDFDocumentProxy,
-} from 'pdfjs-dist'
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+} from 'pdfjs-dist/legacy/build/pdf.mjs'
+import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import { tidyBook, type PageLine, type PageModel } from './bookCards'
 
 export type {
@@ -22,7 +23,9 @@ export type { PageModel, PageLine } from './bookCards'
 
 GlobalWorkerOptions.workerSrc = workerSrc
 
-const BOOK_CROP = { x0: 24, y0: 30, x1: 572, y1: 738 }
+const VIEW_PAD_X = 0.04
+const VIEW_PAD_TOP = 0.045
+const VIEW_PAD_BOT = 0.055
 
 function joinBits(bits: { x: number; str: string; width: number }[]) {
   const ordered = [...bits].sort((a, b) => a.x - b.x)
@@ -80,6 +83,7 @@ export async function extractPageModels(
   const models: PageModel[] = []
   for (let i = 1; i <= total; i++) {
     const page = await pdf.getPage(i)
+    const viewport = page.getViewport({ scale: 1 })
     const [, , width, height] = page.view
     const content = await page.getTextContent()
     const rows: { y: number; h: number; bits: { x: number; str: string; width: number }[] }[] = []
@@ -99,12 +103,21 @@ export async function extractPageModels(
     }
     rows.sort((a, b) => b.y - a.y)
     const lines = mergeHyphen(
-      rows.map((row) => ({
-        text: joinBits(row.bits),
-        x: Math.min(...row.bits.map((b) => b.x)),
-        y: row.y,
-        h: row.h,
-      })),
+      rows.map((row) => {
+        const x = Math.min(...row.bits.map((b) => b.x))
+        const [, y0] = viewport.convertToViewportPoint(x, row.y)
+        const [, y1] = viewport.convertToViewportPoint(x, row.y + row.h)
+        const topPx = Math.min(y0, y1)
+        const botPx = Math.max(y0, y1)
+        return {
+          text: joinBits(row.bits),
+          x,
+          y: row.y,
+          h: row.h,
+          top: topPx / viewport.height,
+          bot: botPx / viewport.height,
+        }
+      }),
     ).filter((l) => l.text)
     models.push({
       text: lines.map((l) => l.text).join('\n'),
@@ -141,26 +154,86 @@ async function renderFull(
   return { page, viewport, full }
 }
 
+export type CropImage = {
+  data: string
+  width: number
+  height: number
+}
+
+function copyPixels(
+  full: HTMLCanvasElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  quality: number,
+): CropImage {
+  const sx = Math.max(0, Math.floor(x))
+  const sy = Math.max(0, Math.floor(y))
+  const sw = Math.max(1, Math.min(Math.floor(w), full.width - sx))
+  const sh = Math.max(1, Math.min(Math.floor(h), full.height - sy))
+  const cut = document.createElement('canvas')
+  cut.width = sw
+  cut.height = sh
+  const cutCtx = cut.getContext('2d')
+  if (!cutCtx) throw new Error('Canvas açılamadı.')
+  cutCtx.drawImage(full, sx, sy, sw, sh, 0, 0, sw, sh)
+  return { data: cut.toDataURL('image/jpeg', quality), width: sw, height: sh }
+}
+
+export async function renderPageCrop(
+  pdf: PDFDocumentProxy,
+  pageNumber: number,
+  scale = 1.35,
+  cropBook = false,
+): Promise<CropImage> {
+  const { viewport, full } = await renderFull(pdf, pageNumber, scale)
+  if (!cropBook) {
+    return {
+      data: full.toDataURL('image/jpeg', 0.84),
+      width: full.width,
+      height: full.height,
+    }
+  }
+  return copyPixels(
+    full,
+    viewport.width * VIEW_PAD_X,
+    viewport.height * VIEW_PAD_TOP,
+    viewport.width * (1 - VIEW_PAD_X * 2),
+    viewport.height * (1 - VIEW_PAD_TOP - VIEW_PAD_BOT),
+    0.88,
+  )
+}
+
 export async function renderPageDataUrl(
   pdf: PDFDocumentProxy,
   pageNumber: number,
   scale = 1.35,
   cropBook = false,
 ): Promise<string> {
-  const { page, viewport, full } = await renderFull(pdf, pageNumber, scale)
-  if (!cropBook) return full.toDataURL('image/jpeg', 0.84)
-  const [, , pw, ph] = page.view
-  const x = Math.floor(viewport.width * (BOOK_CROP.x0 / pw))
-  const y = Math.floor(viewport.height * (BOOK_CROP.y0 / ph))
-  const w = Math.floor(viewport.width * ((BOOK_CROP.x1 - BOOK_CROP.x0) / pw))
-  const h = Math.floor(viewport.height * ((BOOK_CROP.y1 - BOOK_CROP.y0) / ph))
-  const cut = document.createElement('canvas')
-  cut.width = Math.max(1, w)
-  cut.height = Math.max(1, h)
-  const cutCtx = cut.getContext('2d')
-  if (!cutCtx) throw new Error('Canvas açılamadı.')
-  cutCtx.drawImage(full, x, y, w, h, 0, 0, w, h)
-  return cut.toDataURL('image/jpeg', 0.86)
+  return (await renderPageCrop(pdf, pageNumber, scale, cropBook)).data
+}
+
+export async function renderBandCrop(
+  pdf: PDFDocumentProxy,
+  pageNumber: number,
+  top: number,
+  bottom: number,
+  scale = 1.7,
+): Promise<CropImage> {
+  const { viewport, full } = await renderFull(pdf, pageNumber, scale)
+  let t = Number.isFinite(top) ? top : VIEW_PAD_TOP
+  let b = Number.isFinite(bottom) ? bottom : 1 - VIEW_PAD_BOT
+  t = Math.max(VIEW_PAD_TOP, Math.min(0.88, t))
+  b = Math.min(1 - VIEW_PAD_BOT, Math.max(t + 0.08, b))
+  return copyPixels(
+    full,
+    viewport.width * VIEW_PAD_X,
+    viewport.height * t,
+    viewport.width * (1 - VIEW_PAD_X * 2),
+    viewport.height * (b - t),
+    0.88,
+  )
 }
 
 export async function renderBandDataUrl(
@@ -168,28 +241,7 @@ export async function renderBandDataUrl(
   pageNumber: number,
   top: number,
   bottom: number,
-  scale = 2.15,
+  scale = 1.7,
 ): Promise<string> {
-  const { page, viewport, full } = await renderFull(pdf, pageNumber, scale)
-  const [, , , ph] = page.view
-  const pad = 0.012
-  const t = Math.max(0.02, top - pad)
-  const b = Math.min(0.98, bottom + pad)
-  const yPdfTop = ph * (1 - t)
-  const yPdfBot = ph * (1 - b)
-  const [x0] = viewport.convertToViewportPoint(BOOK_CROP.x0, yPdfTop)
-  const [x1] = viewport.convertToViewportPoint(BOOK_CROP.x1, yPdfTop)
-  const [, yA] = viewport.convertToViewportPoint(BOOK_CROP.x0, yPdfTop)
-  const [, yB] = viewport.convertToViewportPoint(BOOK_CROP.x0, yPdfBot)
-  const x = Math.max(0, Math.floor(Math.min(x0, x1)))
-  const w = Math.max(8, Math.floor(Math.abs(x1 - x0)))
-  const y = Math.max(0, Math.floor(Math.min(yA, yB)))
-  const h = Math.max(8, Math.floor(Math.abs(yA - yB)))
-  const cut = document.createElement('canvas')
-  cut.width = w
-  cut.height = h
-  const cutCtx = cut.getContext('2d')
-  if (!cutCtx) throw new Error('Canvas açılamadı.')
-  cutCtx.drawImage(full, x, y, Math.min(w, full.width - x), Math.min(h, full.height - y), 0, 0, w, h)
-  return cut.toDataURL('image/jpeg', 0.9)
+  return (await renderBandCrop(pdf, pageNumber, top, bottom, scale)).data
 }

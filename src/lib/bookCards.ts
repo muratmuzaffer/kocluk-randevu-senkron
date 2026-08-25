@@ -3,6 +3,8 @@ export type PageLine = {
   x: number
   y: number
   h: number
+  top?: number
+  bot?: number
 }
 
 export type PageModel = {
@@ -572,16 +574,24 @@ export function parseCards(raw: string, model?: PageModel): BookCard[] {
 
 export function stringModel(text: string): PageModel {
   const lines = toLines(text)
+  const height = Math.max(800, 200 + lines.length * 20)
+  const topY = Math.round(height * 0.82)
   return {
     text,
     width: 500,
-    height: Math.max(800, lines.length * 18 + 80),
-    lines: lines.map((line, i) => ({
-      text: line,
-      x: 40,
-      y: 760 - i * 18,
-      h: 12,
-    })),
+    height,
+    lines: lines.map((line, i) => {
+      const y = topY - i * 18
+      const h = 12
+      return {
+        text: line,
+        x: 40,
+        y,
+        h,
+        top: (height - y - h) / height,
+        bot: (height - y) / height,
+      }
+    }),
   }
 }
 

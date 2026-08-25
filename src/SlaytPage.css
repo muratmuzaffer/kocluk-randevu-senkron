@@ -121,33 +121,33 @@
   letter-spacing: 0.02em;
 }
 
-.mk-crop {
-  position: absolute;
-  left: 2.1%;
-  top: 9.4%;
-  width: 95.8%;
-  height: 80.4%;
-  object-fit: contain;
-  object-position: center;
-  background: transparent;
-}
-
-.mk-pair {
+.mk-well {
   position: absolute;
   left: 1.9%;
-  top: 9.4%;
+  top: 8.8%;
   width: 96.2%;
-  height: 80.4%;
-  display: flex;
-  gap: 0.7%;
+  height: 85%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
 }
 
-.mk-pair img {
-  width: 49.65%;
+.mk-well img {
+  width: 100%;
   height: 100%;
   object-fit: contain;
-  object-position: center top;
-  background: #fff;
+  object-position: center;
+}
+
+.mk-well.mk-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8%;
+}
+
+.mk-well.mk-pair img {
+  max-width: 49%;
 }
 
 .mk-card {
@@ -373,7 +373,10 @@
 
 .mk-wait {
   position: absolute;
-  inset: 20% 10% 10%;
+  left: 1.9%;
+  top: 8.8%;
+  width: 96.2%;
+  height: 85%;
   margin: 0;
   display: grid;
   place-items: center;

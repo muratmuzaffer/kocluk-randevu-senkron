@@ -1,15 +1,84 @@
 import PptxGenJS from 'pptxgenjs'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import type { Deck } from './pdfSlides'
+import type { Deck, PageKind } from './pdfSlides'
 import { renderPageDataUrl } from './pdfSlides'
+import coverUrl from '../assets/matkeys/cover.jpg'
+import titleUrl from '../assets/matkeys/title.png'
+import contentUrl from '../assets/matkeys/content.jpg'
 
-function slug(text: string) {
-  return text
-    .toLocaleLowerCase('tr-TR')
-    .replace(/[^a-z0-9çğıöşü\s-]+/gi, '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .slice(0, 60)
+const W = 20
+const H = 11.25
+
+const HEADER: Record<PageKind, string> = {
+  kapak: '',
+  hazir: 'HAZIR MIYIZ?',
+  basla: 'BAŞLAYALIM',
+  giris: '',
+  soru: 'ÖLÇME VE DEĞERLENDİRME SORULARI',
+}
+
+async function urlToData(url: string): Promise<string> {
+  const res = await fetch(url)
+  const blob = await res.blob()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+function unitTitle(deck: Deck) {
+  return deck.unit.title.replace(/\s+/g, ' ').trim().toLocaleUpperCase('tr-TR')
+}
+
+function headerTitle(deck: Deck, kind: PageKind) {
+  return HEADER[kind] || unitTitle(deck)
+}
+
+function fileName(deck: Deck) {
+  const title = unitTitle(deck)
+    .replace(/[\\/:*?"<>|]+/g, '')
+    .slice(0, 70)
+  return `5.${deck.unit.number} ${title || 'TEMA'}.pptx`
+}
+
+function addBackground(slide: PptxGenJS.Slide, data: string) {
+  slide.addImage({ data, x: 0, y: 0, w: W, h: H })
+}
+
+function addSectionTitle(slide: PptxGenJS.Slide, title: string) {
+  const size = title.length > 42 ? 28 : title.length > 28 ? 36 : title.length > 16 ? 48 : 56
+  slide.addText(title, {
+    x: 8.2,
+    y: 4.55,
+    w: 11.4,
+    h: 3.6,
+    fontFace: 'Arial Black',
+    fontSize: size,
+    bold: true,
+    color: '1A1A1A',
+    align: 'center',
+    valign: 'middle',
+    margin: 0,
+  })
+}
+
+function addHeaderLabel(slide: PptxGenJS.Slide, title: string) {
+  const size = title.length > 42 ? 22 : title.length > 28 ? 28 : 32
+  slide.addText(title, {
+    x: 0,
+    y: 0.12,
+    w: 17.1,
+    h: 0.72,
+    fontFace: 'Arial Black',
+    fontSize: size,
+    bold: true,
+    color: 'FFFFFF',
+    align: 'center',
+    valign: 'middle',
+    margin: 0,
+  })
 }
 
 export async function downloadUnitPptx(
@@ -17,59 +86,47 @@ export async function downloadUnitPptx(
   deck: Deck,
   onProgress?: (done: number, total: number) => void,
 ) {
+  const [cover, titleBg, contentBg] = await Promise.all([
+    urlToData(coverUrl),
+    urlToData(titleUrl),
+    urlToData(contentUrl),
+  ])
+
   const pres = new PptxGenJS()
-  pres.defineLayout({ name: 'WIDE', width: 13.333, height: 7.5 })
-  pres.layout = 'WIDE'
-  pres.title = `${deck.unit.number}. tema · ${deck.unit.title}`
-  pres.author = 'Tarık Can Erdoğan'
+  pres.defineLayout({ name: 'MATKEYS', width: W, height: H })
+  pres.layout = 'MATKEYS'
+  pres.title = `5.${deck.unit.number} ${unitTitle(deck)}`
+  pres.author = 'MatKeys'
+  pres.subject = 'Tarık Can Erdoğan'
 
-  const box = { x: 0.28, y: 0.72, w: 12.77, h: 6.48 }
+  const coverSlide = pres.addSlide()
+  addBackground(coverSlide, cover)
+
+  const titleSlide = pres.addSlide()
+  addBackground(titleSlide, titleBg)
+  addSectionTitle(titleSlide, unitTitle(deck))
+
   const total = deck.slides.length
-
   for (let i = 0; i < deck.slides.length; i++) {
     const item = deck.slides[i]
-    const data = await renderPageDataUrl(pdf, item.page, 1.55)
+    const data = await renderPageDataUrl(pdf, item.page, 2.35, true)
     const slide = pres.addSlide()
-    slide.addShape('rect', {
-      x: 0,
-      y: 0,
-      w: 13.333,
-      h: 0.58,
-      fill: { color: '217346' },
-    })
-    slide.addText(item.label.toLocaleUpperCase('tr-TR'), {
-      x: 0.28,
-      y: 0.08,
-      w: 9.2,
-      h: 0.42,
-      fontFace: 'Calibri',
-      fontSize: 16,
-      bold: true,
-      color: 'FFFFFF',
-      margin: 0,
-    })
-    slide.addText(`s. ${item.page}`, {
-      x: 10.4,
-      y: 0.08,
-      w: 2.6,
-      h: 0.42,
-      fontFace: 'Calibri',
-      fontSize: 14,
-      align: 'right',
-      color: 'D7E8DC',
-      margin: 0,
-    })
+    addBackground(slide, contentBg)
+    addHeaderLabel(slide, headerTitle(deck, item.kind))
     slide.addImage({
       data,
-      x: box.x,
-      y: box.y,
-      w: box.w,
-      h: box.h,
-      sizing: { type: 'contain', w: box.w, h: box.h },
+      x: 0.32,
+      y: 1.02,
+      w: 19.36,
+      h: 9.22,
+      sizing: { type: 'contain', w: 19.36, h: 9.22 },
     })
     onProgress?.(i + 1, total)
   }
 
-  const name = `${deck.unit.number}-tema-${slug(deck.unit.title) || 'unite'}.pptx`
-  await pres.writeFile({ fileName: name })
+  const end = pres.addSlide()
+  addBackground(end, titleBg)
+  addSectionTitle(end, unitTitle(deck))
+
+  await pres.writeFile({ fileName: fileName(deck) })
 }

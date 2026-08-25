@@ -42,14 +42,28 @@ export async function renderPageDataUrl(
   pdf: PDFDocumentProxy,
   pageNumber: number,
   scale = 1.35,
+  cropBook = false,
 ): Promise<string> {
   const page = await pdf.getPage(pageNumber)
   const viewport = page.getViewport({ scale })
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.floor(viewport.width)
-  canvas.height = Math.floor(viewport.height)
-  const ctx = canvas.getContext('2d')
+  const full = document.createElement('canvas')
+  full.width = Math.floor(viewport.width)
+  full.height = Math.floor(viewport.height)
+  const ctx = full.getContext('2d')
   if (!ctx) throw new Error('Canvas açılamadı.')
-  await page.render({ canvasContext: ctx, viewport, canvas }).promise
-  return canvas.toDataURL('image/jpeg', 0.84)
+  await page.render({ canvasContext: ctx, viewport, canvas: full }).promise
+  if (!cropBook) return full.toDataURL('image/jpeg', 0.84)
+
+  const [, , pw, ph] = page.view
+  const x = Math.floor(viewport.width * (30 / pw))
+  const y = Math.floor(viewport.height * (36 / ph))
+  const w = Math.floor(viewport.width * ((524 - 30) / pw))
+  const h = Math.floor(viewport.height * ((722 - 36) / ph))
+  const cut = document.createElement('canvas')
+  cut.width = Math.max(1, w)
+  cut.height = Math.max(1, h)
+  const cutCtx = cut.getContext('2d')
+  if (!cutCtx) throw new Error('Canvas açılamadı.')
+  cutCtx.drawImage(full, x, y, w, h, 0, 0, w, h)
+  return cut.toDataURL('image/jpeg', 0.86)
 }

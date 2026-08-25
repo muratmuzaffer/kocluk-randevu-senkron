@@ -129,9 +129,9 @@ export default function SlaytPage({ active }: Props) {
   return (
     <div className="slayt-pane">
       <p className="slayt-lead">
-        Kitap PDF’ini yükleyin, üniteyi seçin. Slayt tek dosyada harmanlanır:
-        Hazır mıyız, Başlayalım, konuya giriş, sonra sorular. Konu başlıkları
-        ayrı sunumlara bölünmez. Kitaptaki sayfalar olduğu gibi kullanılır.
+        Kitap PDF’ini yükleyin, üniteyi seçin. Sunum MatKeys formatında hazırlanır:
+        kapak, başlık, kitaptaki sayfalar, kapanış. Akış Hazır mıyız, Başlayalım,
+        konuya giriş, sonra sorular. Konu başlıkları ayrı dosyalara bölünmez.
       </p>
 
       <section className="files-panel slayt-files">

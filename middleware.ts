@@ -1,7 +1,7 @@
 import { next } from '@vercel/edge'
 
 export const config = {
-  matcher: ['/(.*)'],
+  matcher: ['/((?!assets/).*)'],
 }
 
 const COOKIE = 'tce_auth'

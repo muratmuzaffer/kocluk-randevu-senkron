@@ -21,6 +21,7 @@ import {
   titleUrl,
   unitTitle,
 } from './lib/pptxFromPages'
+import { choiceBits, stepBits } from './lib/bookCards'
 import './SlaytPage.css'
 
 type Props = {
@@ -154,8 +155,9 @@ export default function SlaytPage({ active }: Props) {
   return (
     <div className="slayt-pane">
       <p className="slayt-lead">
-        Kitap PDF’ini yükleyin, üniteyi seçin. Metin kitaptan birebir alınır;
-        örnek, adım ve soru ayrı slayta bölünür. Şekiller kitaptan kesilir.
+        Kitap PDF’ini yükleyin, üniteyi seçin. Metin ve görseller kitaptan alınır;
+        işlemler kitaptan kesilir. Soru tipi (çoktan seçmeli, açık uçlu, adım)
+        ayrı düzenlenir.
       </p>
 
       <section className="files-panel slayt-files">
@@ -264,27 +266,78 @@ export default function SlaytPage({ active }: Props) {
               <>
                 <img className="mk-bg" src={contentUrl} alt="" />
                 <p className="mk-head">{headerTitle(deck, current)}</p>
-                <div className={`mk-card ${figure ? 'with-fig' : ''}`}>
+                <div
+                  className={`mk-card layout-${current.layout || 'prose'} ${
+                    figure
+                      ? current.figureRole === 'hero' || current.layout === 'math'
+                        ? 'hero-fig'
+                        : 'with-fig'
+                      : ''
+                  }`}
+                >
                   {figure ? (
                     <img className="mk-fig" src={figure} alt="" />
                   ) : null}
                   <div className="mk-copy">
-                    {current.pill ? <span className="mk-pill">{current.pill}</span> : null}
-                    {current.prompt ? <p className="mk-prompt">{current.prompt}</p> : null}
-                    {current.bullets.length ? (
-                      <ul className="mk-bullets">
-                        {current.bullets.map((bit) => (
-                          <li key={bit}>{bit}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {current.choices.length ? (
-                      <ul
-                        className={`mk-choices cols-${current.choices.length > 3 && !figure ? 2 : 1}`}
+                    {current.pill ? (
+                      <span
+                        className={`mk-pill ${/etkinlik/i.test(current.pill) ? 'green' : ''}`}
                       >
-                        {current.choices.map((choice) => (
-                          <li key={choice}>{choice}</li>
-                        ))}
+                        {current.pill}
+                      </span>
+                    ) : null}
+                    {current.prompt ? (
+                      <p
+                        className={`mk-prompt ${current.layout === 'math' && !figure ? 'math' : ''}`}
+                      >
+                        {current.prompt}
+                      </p>
+                    ) : null}
+                    {current.layout === 'steps' && current.bullets.length ? (
+                      <div className={`mk-steps cols-${current.bullets.length > 2 ? 2 : 1}`}>
+                        {current.bullets.map((bit, i) => {
+                          const { head, body } = stepBits(bit)
+                          return (
+                            <div key={bit} className="mk-step">
+                              <strong>{head || `${i + 1}. Adım`}</strong>
+                              <span>{body}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : null}
+                    {current.layout === 'open' && current.parts.length ? (
+                      <ol className="mk-parts">
+                        {current.parts.map((part, i) => {
+                          const { letter, text } = choiceBits(part)
+                          return (
+                            <li key={part}>
+                              <em>{letter || String.fromCharCode(97 + i)}</em>
+                              <span>{text || part}</span>
+                            </li>
+                          )
+                        })}
+                      </ol>
+                    ) : null}
+                    {current.layout === 'mcq' && current.choices.length ? (
+                      <ul
+                        className={`mk-choices cols-${
+                          current.choices.some((c) => c.length > 42) ||
+                          current.choices.length <= 3 ||
+                          figure
+                            ? 1
+                            : 2
+                        }`}
+                      >
+                        {current.choices.map((choice) => {
+                          const { letter, text } = choiceBits(choice)
+                          return (
+                            <li key={choice}>
+                              {letter ? <b>{letter}</b> : null}
+                              <span>{text || choice}</span>
+                            </li>
+                          )
+                        })}
                       </ul>
                     ) : null}
                   </div>

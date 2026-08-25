@@ -12,16 +12,21 @@ export type PageModel = {
   height: number
 }
 
+export type CardLayout = 'prose' | 'steps' | 'example' | 'mcq' | 'open' | 'math'
+
 export type BookCard = {
   prompt: string
   choices: string[]
   bullets: string[]
+  parts: string[]
   pill: string
+  layout: CardLayout
+  figureRole?: 'side' | 'hero'
   figureTop?: number
   figureBottom?: number
 }
 
-const MAX_BODY = 880
+const MAX_BODY = 640
 const CITIES =
   /şanlıurfa|manisa|istanbul|erzurum|denizli|ankara|adana|izmir|bursa|antalya|konya|gaziantep/i
 
@@ -69,8 +74,23 @@ function looksLikeQuestion(text: string) {
   )
 }
 
+export function isMathLine(line: string) {
+  const s = tidyBook(line)
+  if (!s || s.length > 110) return false
+  if (/^(örnek|etkinlik|adım)\b/i.test(s)) return false
+  if (/[?]/.test(s) && s.length > 42) return false
+  if (/[□■◯○◼◻]|_{2,}|\.{3}/.test(s)) return true
+  const ops = (s.match(/[+=×÷:−]/g) || []).length
+  if (s.includes('=') && ops >= 1 && s.length < 72) return true
+  if (/^\d+(\s*[+\-×÷:]\s*\d+){1,}\s*=/.test(s)) return true
+  if (/\(\s*\d+\s*[+\-×÷]\s*\d+\s*\)/.test(s) && s.length < 80) return true
+  if (/^[a-z]\s*[+\-×÷=]\s*[a-z]/i.test(s) && s.length < 48) return true
+  return false
+}
+
 function isTableCellLine(line: string) {
   const s = line.trim()
+  if (isMathLine(s)) return false
   if (/^(kadın|erkek|toplam)\b/i.test(s) && (/\d/.test(s) || s.split(/\s+/).length <= 2)) return true
   if (/cinsiyet/i.test(s) && /nüfus/i.test(s) && s.length < 80) return true
   if (/yüzdesi\s*\(%\)/i.test(s) && s.length < 56) return true
@@ -83,6 +103,7 @@ function isGarbageLine(line: string) {
   if (line.includes('\uFFFD')) return true
   if (/^[A-Da-d]\s*[)]/.test(line.trim())) return false
   if (/^\d{1,2}\s*[.)]\s+\S/.test(line.trim())) return false
+  if (isMathLine(line)) return false
   if (isTableCellLine(line)) return true
   const t = fold(line)
   if (/^GRAFIK\s*:/.test(t) && line.length < 80) return true
@@ -107,6 +128,16 @@ function wantsChart(text: string) {
   return t.includes('GRAFIK') || t.includes('SEKIL') || t.includes('DIYAGRAM')
 }
 
+function wantsShape(text: string) {
+  const t = fold(text)
+  return (
+    t.includes('YANDAKI') ||
+    t.includes('ASAGIDAKI SEKIL') ||
+    t.includes('SEKILDE') ||
+    t.includes('GORSELDE')
+  )
+}
+
 export function isOcrJunkPage(text: string) {
   if ((text.match(/\uFFFD/g) || []).length >= 2) return true
   if (/grafk|satılan kt|ktapçıda|ktap tur/i.test(text)) return true
@@ -129,10 +160,23 @@ function stripTableDump(text: string) {
   )
 }
 
+function emptyCard(): BookCard {
+  return {
+    prompt: '',
+    choices: [],
+    bullets: [],
+    parts: [],
+    pill: '',
+    layout: 'prose',
+  }
+}
+
 function isProse(card: BookCard) {
   return (
+    card.layout === 'prose' &&
     !card.choices.length &&
     !card.bullets.length &&
+    !card.parts.length &&
     !card.pill &&
     !looksLikeQuestion(card.prompt)
   )
@@ -143,18 +187,16 @@ function mergeProse(cards: BookCard[]) {
   for (const card of cards) {
     const last = out[out.length - 1]
     const combined = last ? last.prompt.length + card.prompt.length + 1 : 0
-    const orphan = last ? last.prompt.length < 220 || card.prompt.length < 220 : false
+    const orphan = last ? last.prompt.length < 200 || card.prompt.length < 200 : false
     if (
       last &&
       isProse(last) &&
       isProse(card) &&
-      (combined <= MAX_BODY || (orphan && combined <= MAX_BODY + 320))
+      last.figureTop == null &&
+      card.figureTop == null &&
+      (combined <= MAX_BODY || (orphan && combined <= MAX_BODY + 240))
     ) {
       last.prompt = tidyBook(`${last.prompt} ${card.prompt}`)
-      if (card.figureTop != null && last.figureTop == null) {
-        last.figureTop = card.figureTop
-        last.figureBottom = card.figureBottom
-      }
       continue
     }
     out.push({ ...card })
@@ -162,19 +204,23 @@ function mergeProse(cards: BookCard[]) {
   return out
 }
 
+function bandFrom(model: PageModel, lines: PageLine[], padRatio = 0.04) {
+  if (!lines.length) return null
+  const h = model.height || 1
+  const yMax = Math.max(...lines.map((c) => c.y + c.h))
+  const yMin = Math.min(...lines.map((c) => c.y))
+  const pad = h * padRatio
+  const top = Math.max(0.07, (h - yMax - pad) / h)
+  const bottom = Math.min(0.93, (h - yMin + pad) / h)
+  if (bottom - top < 0.05) return null
+  return { top, bottom }
+}
+
 function tableBand(model: PageModel) {
   const cells = model.lines.filter((l) => isTableCellLine(tidyBook(l.text)))
   const captions = model.lines.filter((l) => /^tablo\s*:/i.test(tidyBook(l.text)))
   const bits = cells.length >= 2 ? [...cells, ...captions] : cells
-  if (bits.length < 2) return null
-  const h = model.height || 1
-  const yMax = Math.max(...bits.map((c) => c.y + c.h))
-  const yMin = Math.min(...bits.map((c) => c.y))
-  const pad = h * 0.04
-  return {
-    top: Math.max(0.08, (h - yMax - pad) / h),
-    bottom: Math.min(0.9, (h - yMin + pad) / h),
-  }
+  return bits.length >= 2 ? bandFrom(model, bits, 0.04) : null
 }
 
 function isHeaderNoise(text: string) {
@@ -191,7 +237,7 @@ function isHeaderNoise(text: string) {
     'SAYILAR VE NICELIKLER (2): KESIRLER',
     'KESIRLER',
   ]
-  return titles.some((title) => t === title || t.startsWith(title + ' ') && t.length <= title.length + 8)
+  return titles.some((title) => t === title || (t.startsWith(title + ' ') && t.length <= title.length + 8))
 }
 
 function isChromeLine(line: string) {
@@ -206,7 +252,9 @@ function isChromeLine(line: string) {
   return isHeaderNoise(line)
 }
 
-function markerOf(line: string): 'example' | 'activity' | 'step' | 'question' | 'choice' | 'heading' | 'body' {
+function markerOf(
+  line: string,
+): 'example' | 'activity' | 'step' | 'question' | 'choice' | 'heading' | 'body' {
   const s = line.trim()
   if (/^örnek\s*\d+\b/i.test(s)) return 'example'
   if (/^etkinlik\s*\d+\b/i.test(s)) return 'activity'
@@ -246,10 +294,10 @@ function packSentences(parts: string[], max = MAX_BODY) {
     }
   }
   if (buf) out.push(buf)
-  while (out.length >= 2 && out[out.length - 1].length < 200) {
+  while (out.length >= 2 && out[out.length - 1].length < 180) {
     const tail = out.pop()!
     const prev = out[out.length - 1]
-    if (prev.length + tail.length + 1 <= max + 320) {
+    if (prev.length + tail.length + 1 <= max + 260) {
       out[out.length - 1] = `${prev} ${tail}`
     } else {
       out.push(tail)
@@ -259,24 +307,27 @@ function packSentences(parts: string[], max = MAX_BODY) {
   return out
 }
 
-function letteredChoices(text: string) {
+function splitLettered(text: string): { kind: 'mcq' | 'open' | 'none'; prompt: string; items: string[] } {
   const re = /(?:^|\s)([A-Da-d])\s*[)]\s+/g
   const hits: { index: number; letter: string }[] = []
   for (const m of text.matchAll(re)) {
-    hits.push({ index: m.index!, letter: m[1].toUpperCase() })
+    hits.push({ index: m.index!, letter: m[1] })
   }
-  if (hits.length < 2) return { prompt: tidyBook(text), choices: [] as string[] }
-  const letters = hits.map((h) => h.letter).join('')
-  if (!/^(ABCD|ABC|AB)/.test(letters)) return { prompt: tidyBook(text), choices: [] as string[] }
+  if (hits.length < 2) return { kind: 'none', prompt: tidyBook(text), items: [] }
+  const letters = hits.map((h) => h.letter.toUpperCase()).join('')
+  if (!/^(ABCD|ABC|AB)/.test(letters)) return { kind: 'none', prompt: tidyBook(text), items: [] }
   const prompt = tidyBook(text.slice(0, hits[0].index))
-  const choices: string[] = []
+  const items: string[] = []
   for (let i = 0; i < hits.length; i++) {
     const start = hits[i].index
     const end = i + 1 < hits.length ? hits[i + 1].index : text.length
     const bit = tidyBook(text.slice(start, end))
-    if (bit) choices.push(bit)
+    if (bit) items.push(bit)
   }
-  return { prompt, choices }
+  const lowerSource = hits.every((h) => h.letter >= 'a' && h.letter <= 'd')
+  const longish = items.filter((it) => it.length > 48 || /[?]/.test(it)).length
+  if (lowerSource && longish >= 1) return { kind: 'open', prompt, items }
+  return { kind: 'mcq', prompt, items }
 }
 
 function toLines(raw: string) {
@@ -291,6 +342,17 @@ function toLines(raw: string) {
     .split('\n')
     .map((l) => tidyBook(l))
     .filter((l) => l && !isChromeLine(l))
+}
+
+function richLines(raw: string, model?: PageModel): PageLine[] {
+  if (model?.lines.length) {
+    return model.lines
+      .slice()
+      .sort((a, b) => b.y - a.y)
+      .map((l) => ({ ...l, text: tidyBook(l.text) }))
+      .filter((l) => l.text && !isChromeLine(l.text))
+  }
+  return toLines(raw).map((text, i) => ({ text, x: 40, y: 800 - i * 18, h: 12 }))
 }
 
 function figuresOn(model: PageModel) {
@@ -312,38 +374,116 @@ function figuresOn(model: PageModel) {
   return out
 }
 
-function attachFigure(card: BookCard, figs: { top: number; bottom: number }[]) {
-  if (!figs.length) return card
+function attachFigure(card: BookCard, figs: { top: number; bottom: number }[], role: 'side' | 'hero' = 'side') {
+  if (!figs.length || card.figureTop != null) return card
   const fig = figs[0]
-  return { ...card, figureTop: fig.top, figureBottom: fig.bottom }
+  return { ...card, figureTop: fig.top, figureBottom: fig.bottom, figureRole: role }
+}
+
+function pushSplit(
+  cards: BookCard[],
+  joined: string,
+  pill: string,
+  source: PageLine[],
+  model?: PageModel,
+) {
+  const split = splitLettered(joined)
+  if (split.kind === 'mcq') {
+    cards.push({
+      ...emptyCard(),
+      prompt: split.prompt || pill,
+      choices: split.items,
+      pill,
+      layout: 'mcq',
+    })
+    return
+  }
+  if (split.kind === 'open') {
+    cards.push({
+      ...emptyCard(),
+      prompt: split.prompt || pill,
+      parts: split.items,
+      pill,
+      layout: 'open',
+    })
+    return
+  }
+  emitFromLines(source, pill, cards, model)
+}
+
+function emitFromLines(lines: PageLine[], pill: string, cards: BookCard[], model?: PageModel) {
+  const usable = lines.filter((l) => l.text && !isHeaderNoise(l.text) && !isGarbageLine(l.text))
+  if (!usable.length) {
+    if (pill) emitBody(pill, pill, cards)
+    return
+  }
+
+  type Chunk = { kind: 'math' | 'prose'; lines: PageLine[] }
+  const chunks: Chunk[] = []
+  for (const line of usable) {
+    const kind = isMathLine(line.text) ? 'math' : 'prose'
+    const last = chunks[chunks.length - 1]
+    if (last && last.kind === kind) last.lines.push(line)
+    else chunks.push({ kind, lines: [line] })
+  }
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i]
+    const next = chunks[i + 1]
+    if (chunk.kind === 'prose' && next?.kind === 'math') {
+      const joined = stripTableDump(chunk.lines.map((l) => l.text).join(' '))
+      if (joined.length < 280 && !looksLikeQuestion(joined)) continue
+    }
+    if (chunk.kind === 'math') {
+      const mathText = chunk.lines.map((l) => l.text).join(' ')
+      const prev = chunks[i - 1]
+      const prevText =
+        prev?.kind === 'prose' ? stripTableDump(prev.lines.map((l) => l.text).join(' ')) : ''
+      const instruction =
+        prevText && prevText.length < 280 && !looksLikeQuestion(prevText) ? prevText : ''
+      const band = model ? bandFrom(model, chunk.lines, 0.05) : null
+      cards.push({
+        ...emptyCard(),
+        prompt: instruction || (band ? '' : mathText),
+        pill,
+        layout: 'math',
+        figureRole: 'hero',
+        figureTop: band?.top,
+        figureBottom: band?.bottom,
+      })
+      continue
+    }
+    const joined = stripTableDump(chunk.lines.map((l) => l.text).join(' '))
+    if (joined.length < 18) continue
+    emitBody(joined, pill, cards)
+  }
 }
 
 function emitBody(text: string, pill: string, cards: BookCard[]) {
   if (isHeaderNoise(text) || isGarbageLine(text)) return
   const cleaned = stripTableDump(text)
   if (cleaned.length < 18) return
-  const packed = packSentences(sentencesOf(cleaned))
+  const packed = packSentences(sentencesOf(cleaned).filter((p) => !isMathLine(p)))
+  const layout: CardLayout = pill ? 'example' : 'prose'
   for (const prompt of packed) {
     if (prompt.length < 24) continue
     if (isGarbageLine(prompt)) continue
-    cards.push({ prompt, choices: [], bullets: [], pill })
+    cards.push({
+      ...emptyCard(),
+      prompt,
+      pill,
+      layout: looksLikeQuestion(prompt) && !pill ? 'open' : layout,
+    })
   }
 }
 
 export function parseCards(raw: string, model?: PageModel): BookCard[] {
-  const lines = model?.lines.length
-    ? model.lines
-        .slice()
-        .sort((a, b) => b.y - a.y)
-        .map((l) => tidyBook(l.text))
-        .filter((l) => l && !isChromeLine(l))
-    : toLines(raw)
-
+  const lines = richLines(raw, model)
   const cards: BookCard[] = []
   let i = 0
   while (i < lines.length) {
     const line = lines[i]
-    const kind = markerOf(line)
+    const kind = markerOf(line.text)
 
     if (kind === 'heading') {
       i += 1
@@ -351,69 +491,51 @@ export function parseCards(raw: string, model?: PageModel): BookCard[] {
     }
 
     if (kind === 'example' || kind === 'activity') {
-      const pill = line
-      const body: string[] = []
+      const pill = line.text
+      const body: PageLine[] = []
       i += 1
       while (i < lines.length) {
-        const next = markerOf(lines[i])
+        const next = markerOf(lines[i].text)
         if (next === 'example' || next === 'activity' || next === 'question' || next === 'step') break
         if (next !== 'heading') body.push(lines[i])
         i += 1
       }
-      const joined = body.join(' ')
-      const { prompt, choices } = letteredChoices(joined)
-      if (choices.length >= 2) {
-        cards.push({ prompt: prompt || pill, choices, bullets: [], pill })
-      } else {
-        emitBody(joined || line, pill, cards)
-      }
+      pushSplit(cards, body.map((l) => l.text).join(' ') || pill, pill, body, model)
       continue
     }
 
     if (kind === 'step') {
       const bullets: string[] = []
-      while (i < lines.length && markerOf(lines[i]) === 'step') {
-        bullets.push(lines[i])
+      while (i < lines.length && markerOf(lines[i].text) === 'step') {
+        bullets.push(lines[i].text)
         i += 1
       }
-      cards.push({ prompt: '', choices: [], bullets, pill: '' })
+      cards.push({ ...emptyCard(), bullets, layout: 'steps' })
       continue
     }
 
     if (kind === 'question') {
-      const parts: string[] = [line]
+      const parts: PageLine[] = [line]
       i += 1
       while (i < lines.length) {
-        const next = markerOf(lines[i])
+        const next = markerOf(lines[i].text)
         if (next === 'question' || next === 'example' || next === 'activity' || next === 'step') break
         parts.push(lines[i])
         i += 1
       }
-      const { prompt, choices } = letteredChoices(parts.join(' '))
-      cards.push({
-        prompt: prompt || tidyBook(parts[0]),
-        choices,
-        bullets: [],
-        pill: '',
-      })
+      pushSplit(cards, parts.map((l) => l.text).join(' '), '', parts, model)
       continue
     }
 
-    const body: string[] = [line]
+    const body: PageLine[] = [line]
     i += 1
     while (i < lines.length) {
-      const next = markerOf(lines[i])
+      const next = markerOf(lines[i].text)
       if (next !== 'body' && next !== 'choice') break
       body.push(lines[i])
       i += 1
     }
-    const joined = body.join(' ')
-    const { prompt, choices } = letteredChoices(joined)
-    if (choices.length >= 2) {
-      cards.push({ prompt, choices, bullets: [], pill: '' })
-    } else {
-      emitBody(joined, '', cards)
-    }
+    pushSplit(cards, body.map((l) => l.text).join(' '), '', body, model)
   }
 
   const tableFig = model ? tableBand(model) : null
@@ -423,15 +545,24 @@ export function parseCards(raw: string, model?: PageModel): BookCard[] {
       (c) =>
         !isGarbageLine(c.prompt) &&
         !isOcrJunkPage(c.prompt) &&
-        (c.prompt.length >= 24 || c.choices.length >= 2 || c.bullets.length >= 2),
+        (c.prompt.length >= 24 ||
+          c.choices.length >= 2 ||
+          c.bullets.length >= 2 ||
+          c.parts.length >= 2 ||
+          c.layout === 'math'),
     ),
   ).map((c) => {
     const prompt = stripTableDump(c.prompt)
-    const table = wantsTable(prompt) || wantsTable(c.pill)
-    const chart = wantsChart(prompt) || wantsChart(c.pill)
-    if (table && tableFig) return attachFigure({ ...c, prompt }, [tableFig])
-    if ((table || chart) && gapFigs.length) return attachFigure({ ...c, prompt }, gapFigs)
-    return { ...c, prompt }
+    const card = { ...c, prompt }
+    if (card.figureTop != null) return card
+    const table = wantsTable(prompt) || wantsTable(card.pill)
+    const chart = wantsChart(prompt) || wantsChart(card.pill)
+    const shape = wantsShape(prompt)
+    if (table && tableFig) return attachFigure(card, [tableFig], 'side')
+    if ((table || chart || shape) && gapFigs.length) {
+      return attachFigure(card, gapFigs, card.layout === 'math' ? 'hero' : 'side')
+    }
+    return card
   })
 }
 
@@ -451,5 +582,17 @@ export function stringModel(text: string): PageModel {
 }
 
 export function isQuestionCard(card: BookCard) {
-  return card.choices.length >= 2 || looksLikeQuestion(card.prompt)
+  return card.choices.length >= 2 || card.parts.length >= 1 || looksLikeQuestion(card.prompt)
+}
+
+export function choiceBits(choice: string) {
+  const m = choice.match(/^([A-Da-d])\s*[)]\s*(.*)$/)
+  if (!m) return { letter: '', text: choice }
+  return { letter: m[1].toUpperCase(), text: m[2] }
+}
+
+export function stepBits(bit: string) {
+  const m = bit.match(/^(\d{1,2}\s*[.)]\s*Adım)\s*(.*)$/i)
+  if (!m) return { head: '', body: bit }
+  return { head: m[1], body: m[2] || bit }
 }

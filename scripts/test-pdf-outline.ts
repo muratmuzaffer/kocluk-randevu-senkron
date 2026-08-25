@@ -74,6 +74,31 @@ assert(two.length === 2, `two ${two.length}`)
 assert(two[0].prompt.includes('Birinci soru'), two[0].prompt)
 assert(two[1].prompt.includes('İkinci soru'), two[1].prompt)
 
+const openQ = parseCards(
+  'Örnek 1 İpek araştırma yapar. a) Burada istatistiksel araştırma yapmayı gerektiren durum nedir? b) Sizce İpek niçin bu araştırmayı yapmak istemiştir?',
+)
+assert(openQ.some((c) => c.layout === 'open' && c.parts.length === 2), `open ${JSON.stringify(openQ)}`)
+assert(openQ.every((c) => c.choices.length === 0), 'open not mcq')
+
+const mathLines = [
+  'Eşitlikte her iki tarafa aynı sayı eklenir.',
+  '3 + 5 = 8',
+  '8 = 8',
+]
+const mathModel = {
+  text: mathLines.join('\n'),
+  width: 500,
+  height: 800,
+  lines: mathLines.map((text, i) => ({ text, x: 40, y: 640 - i * 40, h: 16 })),
+}
+const mathCards = parseCards(mathModel.text, mathModel)
+assert(mathCards.some((c) => c.layout === 'math'), `math ${mathCards.map((c) => c.layout + ':' + c.prompt).join(' | ')}`)
+assert(mathCards.some((c) => c.layout === 'math' && c.figureTop != null), 'math crop')
+assert(
+  mathCards.some((c) => c.layout === 'math' && c.prompt.includes('Eşitlikte') && !c.prompt.includes('3 + 5 = 8')),
+  'math keeps book crop not OCR',
+)
+
 const pages = Array.from({ length: 170 }, (_, i) => `sayfa ${i + 1}`)
 pages[6] = 'İÇİNDEKİLER 4.TEMA:SAYILAR 5.TEMA:İSTATİSTİK'
 pages[7] =

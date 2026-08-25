@@ -21,7 +21,10 @@ export type DeckSlide = {
   prompt: string
   choices: string[]
   bullets: string[]
+  parts: string[]
   pill: string
+  layout: 'prose' | 'steps' | 'example' | 'mcq' | 'open' | 'math'
+  figureRole?: 'side' | 'hero'
   figureTop?: number
   figureBottom?: number
 }
@@ -280,7 +283,9 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
       prompt: '',
       choices: [],
       bullets: [],
+      parts: [],
       pill: '',
+      layout: 'prose',
     })
   }
 
@@ -309,7 +314,10 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
         prompt: card.prompt,
         choices: card.choices,
         bullets: card.bullets,
+        parts: card.parts,
         pill: card.pill,
+        layout: card.layout,
+        figureRole: card.figureRole,
         figureTop: card.figureTop,
         figureBottom: card.figureBottom,
       })
@@ -331,7 +339,12 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
         prompt: card?.prompt || unit.title,
         choices: card?.choices || [],
         bullets: card?.bullets || [],
+        parts: card?.parts || [],
         pill: card?.pill || '',
+        layout: card?.layout || 'prose',
+        figureRole: card?.figureRole,
+        figureTop: card?.figureTop,
+        figureBottom: card?.figureBottom,
       })
     }
   }

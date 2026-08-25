@@ -164,8 +164,12 @@ assert(
   'short hazir title',
 )
 assert(
-  deck.slides.every((s) => !/karekodu/i.test(s.heading + s.prompt)),
-  'no junk heading',
+  cards.filter((s) => s.face === 'card' && s.kind === 'giris').length < 40,
+  'fewer intro slides',
+)
+assert(
+  cards.some((s) => s.figureTop2 != null),
+  'side by side crop',
 )
 assert(
   isLongQuestion(

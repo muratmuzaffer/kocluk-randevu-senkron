@@ -67,9 +67,28 @@ function addSectionTitle(slide: PptxGenJS.Slide, title: string) {
   })
 }
 
-function addCard(slide: PptxGenJS.Slide, item: DeckSlide, figureData?: string) {
-  const hasFigure = Boolean(figureData)
-  if ((item.layout === 'crop' || (!item.prompt && !item.choices.length && !item.parts.length && !item.bullets.length)) && figureData) {
+function addCard(slide: PptxGenJS.Slide, item: DeckSlide, figureData?: string, figureData2?: string) {
+  const pair = Boolean(figureData && figureData2)
+  if ((item.layout === 'crop' || (!item.prompt && !item.choices.length)) && figureData) {
+    if (pair && figureData2) {
+      slide.addImage({
+        data: figureData,
+        x: 0.38,
+        y: 1.05,
+        w: 9.45,
+        h: 9.05,
+        sizing: { type: 'contain', w: 9.45, h: 9.05 },
+      })
+      slide.addImage({
+        data: figureData2,
+        x: 10.17,
+        y: 1.05,
+        w: 9.45,
+        h: 9.05,
+        sizing: { type: 'contain', w: 9.45, h: 9.05 },
+      })
+      return
+    }
     slide.addImage({
       data: figureData,
       x: 0.42,
@@ -80,6 +99,7 @@ function addCard(slide: PptxGenJS.Slide, item: DeckSlide, figureData?: string) {
     })
     return
   }
+  const hasFigure = Boolean(figureData)
   const hero = item.figureRole === 'hero' || item.layout === 'math'
   const layout = item.layout || (item.choices.length ? 'mcq' : item.parts.length ? 'open' : item.bullets.length ? 'steps' : item.pill ? 'example' : 'prose')
 
@@ -418,11 +438,8 @@ export async function downloadUnitPptx(
       addBackground(slide, contentBg)
       addHeaderLabel(slide, headerTitle(deck, item))
       let figureData = ''
-      if (
-        item.figureTop != null &&
-        item.figureBottom != null &&
-        item.figureBottom - item.figureTop > 0.08
-      ) {
+      let figureData2 = ''
+      if (item.figureTop != null && item.figureBottom != null) {
         try {
           figureData = await renderBandDataUrl(
             pdf,
@@ -434,7 +451,19 @@ export async function downloadUnitPptx(
           figureData = ''
         }
       }
-      addCard(slide, item, figureData)
+      if (item.figureTop2 != null && item.figureBottom2 != null) {
+        try {
+          figureData2 = await renderBandDataUrl(
+            pdf,
+            item.page2 || item.page,
+            item.figureTop2,
+            item.figureBottom2,
+          )
+        } catch {
+          figureData2 = ''
+        }
+      }
+      addCard(slide, item, figureData, figureData2)
     }
     onProgress?.(i + 1, total)
   }

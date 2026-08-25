@@ -132,6 +132,24 @@
   background: transparent;
 }
 
+.mk-pair {
+  position: absolute;
+  left: 1.9%;
+  top: 9.4%;
+  width: 96.2%;
+  height: 80.4%;
+  display: flex;
+  gap: 0.7%;
+}
+
+.mk-pair img {
+  width: 49.65%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center top;
+  background: #fff;
+}
+
 .mk-card {
   position: absolute;
   left: 2.4%;

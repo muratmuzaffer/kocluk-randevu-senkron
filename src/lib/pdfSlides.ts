@@ -22,7 +22,7 @@ export type { PageModel, PageLine } from './bookCards'
 
 GlobalWorkerOptions.workerSrc = workerSrc
 
-const BOOK_CROP = { x0: 30, y0: 36, x1: 524, y1: 722 }
+const BOOK_CROP = { x0: 24, y0: 30, x1: 572, y1: 738 }
 
 function joinBits(bits: { x: number; str: string; width: number }[]) {
   const ordered = [...bits].sort((a, b) => a.x - b.x)
@@ -168,25 +168,28 @@ export async function renderBandDataUrl(
   pageNumber: number,
   top: number,
   bottom: number,
-  scale = 2,
+  scale = 2.15,
 ): Promise<string> {
   const { page, viewport, full } = await renderFull(pdf, pageNumber, scale)
   const [, , , ph] = page.view
-  const yPdfTop = ph * (1 - top)
-  const yPdfBot = ph * (1 - bottom)
+  const pad = 0.012
+  const t = Math.max(0.02, top - pad)
+  const b = Math.min(0.98, bottom + pad)
+  const yPdfTop = ph * (1 - t)
+  const yPdfBot = ph * (1 - b)
   const [x0] = viewport.convertToViewportPoint(BOOK_CROP.x0, yPdfTop)
   const [x1] = viewport.convertToViewportPoint(BOOK_CROP.x1, yPdfTop)
   const [, yA] = viewport.convertToViewportPoint(BOOK_CROP.x0, yPdfTop)
   const [, yB] = viewport.convertToViewportPoint(BOOK_CROP.x0, yPdfBot)
-  const x = Math.floor(Math.min(x0, x1))
+  const x = Math.max(0, Math.floor(Math.min(x0, x1)))
   const w = Math.max(8, Math.floor(Math.abs(x1 - x0)))
-  const y = Math.floor(Math.min(yA, yB))
+  const y = Math.max(0, Math.floor(Math.min(yA, yB)))
   const h = Math.max(8, Math.floor(Math.abs(yA - yB)))
   const cut = document.createElement('canvas')
   cut.width = w
   cut.height = h
   const cutCtx = cut.getContext('2d')
   if (!cutCtx) throw new Error('Canvas açılamadı.')
-  cutCtx.drawImage(full, x, y, w, h, 0, 0, w, h)
-  return cut.toDataURL('image/jpeg', 0.88)
+  cutCtx.drawImage(full, x, y, Math.min(w, full.width - x), Math.min(h, full.height - y), 0, 0, w, h)
+  return cut.toDataURL('image/jpeg', 0.9)
 }

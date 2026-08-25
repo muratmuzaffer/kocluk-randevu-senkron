@@ -1,5 +1,5 @@
 import { isOcrJunkPage, stringModel, type PageModel } from './bookCards'
-import { cropBands } from './cropBands'
+import { pageCrop } from './cropBands'
 
 export type PageKind = 'kapak' | 'hazir' | 'basla' | 'giris' | 'soru'
 
@@ -28,6 +28,9 @@ export type DeckSlide = {
   figureRole?: 'side' | 'hero'
   figureTop?: number
   figureBottom?: number
+  page2?: number
+  figureTop2?: number
+  figureBottom2?: number
 }
 
 export type Deck = {
@@ -300,8 +303,9 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
     page: number,
     nextKind: PageKind,
     nextHeading: string,
-    top: number,
-    bottom: number,
+    left: { top: number; bottom: number },
+    right?: { top: number; bottom: number },
+    page2?: number,
   ) => {
     slides.push({
       kind: nextKind,
@@ -310,18 +314,24 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
       heading: nextHeading,
       face: 'card',
       ...blank,
-      figureTop: top,
-      figureBottom: bottom,
+      figureTop: left.top,
+      figureBottom: left.bottom,
+      page2,
+      figureTop2: right?.top,
+      figureBottom2: right?.bottom,
     })
   }
 
-  const chunks: {
+  type Chunk = {
     page: number
+    page2?: number
     kind: PageKind
     heading: string
-    bands: { top: number; bottom: number }[]
-  }[] = []
+    left: { top: number; bottom: number }
+    right?: { top: number; bottom: number }
+  }
 
+  const chunks: Chunk[] = []
   let olcmeStarted = false
   for (let page = unit.start; page <= unit.end; page++) {
     const text = texts[page - 1] || ''
@@ -333,27 +343,48 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
       : classify(text, heading)
     heading = next.heading
     kind = next.kind
-    const bands = cropBands(models[page - 1])
-    if (!bands.length) continue
+    const crop = pageCrop(models[page - 1])
+    if (!crop) continue
     chunks.push({
       page,
       kind,
       heading,
-      bands: bands.map((b) => ({ top: b.top, bottom: b.bottom })),
+      left: crop.left,
+      right: crop.right,
     })
   }
 
-  const body = chunks.filter((c) => c.kind !== 'soru')
-  const olcme = chunks.filter((c) => c.kind === 'soru')
+  const packed: Chunk[] = []
+  for (let i = 0; i < chunks.length; i++) {
+    const cur = chunks[i]
+    const nxt = chunks[i + 1]
+    if (
+      !cur.right &&
+      nxt &&
+      !nxt.right &&
+      nxt.kind === cur.kind &&
+      nxt.heading === cur.heading
+    ) {
+      packed.push({
+        ...cur,
+        right: nxt.left,
+        page2: nxt.page,
+      })
+      i += 1
+      continue
+    }
+    packed.push(cur)
+  }
+
+  const body = packed.filter((c) => c.kind !== 'soru')
+  const olcme = packed.filter((c) => c.kind === 'soru')
   let current = unit.title
   for (const chunk of [...body, ...olcme]) {
     if (chunk.heading !== current) {
       current = chunk.heading
       if (current !== unit.title) pushTitle(chunk.kind, current)
     }
-    for (const band of chunk.bands) {
-      pushCrop(chunk.page, chunk.kind, chunk.heading, band.top, band.bottom)
-    }
+    pushCrop(chunk.page, chunk.kind, chunk.heading, chunk.left, chunk.right, chunk.page2)
   }
 
   if (slides.length === 0) {
@@ -362,7 +393,7 @@ export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
       .find((p) => !isJunkPage(texts[p - 1] || ''))
     if (fallback) {
       pushTitle('giris', unit.title)
-      pushCrop(fallback, 'giris', unit.title, 0.08, 0.9)
+      pushCrop(fallback, 'giris', unit.title, { top: 0.08, bottom: 0.9 })
     }
   }
 

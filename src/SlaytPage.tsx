@@ -41,6 +41,7 @@ export default function SlaytPage({ active }: Props) {
   const [index, setIndex] = useState(0)
   const [exporting, setExporting] = useState(false)
   const [figure, setFigure] = useState('')
+  const [figure2, setFigure2] = useState('')
 
   const unit = units.find((u) => u.id === selected) ?? null
   const counts = useMemo(() => (deck ? kindCounts(deck) : null), [deck])
@@ -73,21 +74,34 @@ export default function SlaytPage({ active }: Props) {
       current.figureBottom == null
     ) {
       setFigure('')
+      setFigure2('')
       return
     }
     let cancelled = false
-    renderBandDataUrl(
-      pdfRef.current,
-      current.page,
-      current.figureTop,
-      current.figureBottom,
-    )
+    const pdf = pdfRef.current
+    renderBandDataUrl(pdf, current.page, current.figureTop, current.figureBottom)
       .then((url) => {
         if (!cancelled) setFigure(url)
       })
       .catch(() => {
         if (!cancelled) setFigure('')
       })
+    if (current.figureTop2 != null && current.figureBottom2 != null) {
+      renderBandDataUrl(
+        pdf,
+        current.page2 || current.page,
+        current.figureTop2,
+        current.figureBottom2,
+      )
+        .then((url) => {
+          if (!cancelled) setFigure2(url)
+        })
+        .catch(() => {
+          if (!cancelled) setFigure2('')
+        })
+    } else {
+      setFigure2('')
+    }
     return () => {
       cancelled = true
     }
@@ -268,7 +282,14 @@ export default function SlaytPage({ active }: Props) {
                 <p className="mk-head">{headerTitle(deck, current)}</p>
                 {current.layout === 'crop' || (!current.prompt && figure) ? (
                   figure ? (
-                    <img className="mk-crop" src={figure} alt="" />
+                    figure2 ? (
+                      <div className="mk-pair">
+                        <img src={figure} alt="" />
+                        <img src={figure2} alt="" />
+                      </div>
+                    ) : (
+                      <img className="mk-crop" src={figure} alt="" />
+                    )
                   ) : (
                     <p className="mk-wait">Kitap kırpılıyor…</p>
                   )

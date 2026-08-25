@@ -1,4 +1,4 @@
-import { skipBookLine, tidyBook, type PageLine, type PageModel } from './bookCards'
+import { tidyBook, type PageLine, type PageModel } from './bookCards'
 
 export type CropBand = {
   top: number
@@ -6,9 +6,14 @@ export type CropBand = {
   text: string
 }
 
-const MAX_H = 0.4
-const MIN_H = 0.08
+export type PageCrop = {
+  text: string
+  left: { top: number; bottom: number }
+  right?: { top: number; bottom: number }
+}
+
 const LONG_Q = 480
+const SPLIT_AT = 0.42
 
 function fold(text: string) {
   return text
@@ -37,24 +42,6 @@ function looksLikeQuestion(text: string) {
   )
 }
 
-function isSplitLine(line: string) {
-  const s = line.trim()
-  if (/^örnek\s*\d+\b/i.test(s)) return true
-  if (/^etkinlik\s*\d+\b/i.test(s)) return true
-  if (/^\d{1,2}\s*[.)]\s+\S/.test(s) && looksLikeQuestion(s)) return true
-  if (
-    s.length > 8 &&
-    s.length < 52 &&
-    s === s.toLocaleUpperCase('tr-TR') &&
-    /[A-ZÇĞİÖŞÜ]/.test(s) &&
-    s.split(/\s+/).length >= 2 &&
-    !/[.?!]/.test(s)
-  ) {
-    return true
-  }
-  return false
-}
-
 export function isLongQuestion(text: string) {
   const t = tidyBook(text)
   if (!looksLikeQuestion(t)) return false
@@ -64,94 +51,97 @@ export function isLongQuestion(text: string) {
   return false
 }
 
-function bandOf(model: PageModel, lines: PageLine[], pad = 0.02) {
+function isEdgeChrome(line: string) {
+  const t = fold(tidyBook(line)).replace(/ \d{2,3}$/, '').trim()
+  if (t.length < 2) return true
+  if (/^\d{1,3}$/.test(line.trim())) return true
+  if (t.includes('KAREKODU') || t.includes('OZET ICERIGE')) return true
+  if (/^\d+\s*\.\s*TEMA\b/.test(t) && t.length < 36) return true
+  if (t.includes('OLCME VE DEGERLENDIRME') && !looksLikeQuestion(line)) return true
+  if (/^(HAZIR MIYIZ|BASLAYALIM)\??$/.test(t)) return true
+  const titles = [
+    'ISLEMLERLE CEBIRSEL DUSUNME',
+    'ISTATISTIKSEL ARASTIRMA SURECI',
+    'ISTATISTIKSEL ARASTIRMA',
+    'VERI GORSELLESTIRME ARACLARI',
+    'VERI GORSELLESTIRME',
+    'VERIDEN OLASILIGA',
+    'SAYILAR VE NICELIKLER (2): KESIRLER',
+    'KESIRLER',
+  ]
+  return titles.some((title) => t === title || (t.startsWith(title + ' ') && t.length <= title.length + 8))
+}
+
+function visualLines(model: PageModel): PageLine[] {
+  return model.lines
+    .slice()
+    .sort((a, b) => b.y - a.y)
+    .map((l) => ({ ...l, text: tidyBook(l.text) }))
+    .filter((l) => l.text && !isEdgeChrome(l.text))
+}
+
+function bandOf(model: PageModel, lines: PageLine[], pad = 0.028) {
   if (!lines.length) return null
   const h = model.height || 1
   const yMax = Math.max(...lines.map((l) => l.y + l.h))
   const yMin = Math.min(...lines.map((l) => l.y))
-  let top = Math.max(0.075, (h - yMax - h * pad) / h)
-  let bottom = Math.min(0.93, (h - yMin + h * pad) / h)
-  if (bottom - top < 0.12) {
-    const extra = (0.12 - (bottom - top)) / 2
-    top = Math.max(0.075, top - extra)
-    bottom = Math.min(0.93, bottom + extra)
+  let top = Math.max(0.06, (h - yMax - h * pad) / h)
+  let bottom = Math.min(0.94, (h - yMin + h * pad * 1.35) / h)
+  if (bottom - top < 0.16) {
+    const extra = (0.16 - (bottom - top)) / 2
+    top = Math.max(0.06, top - extra)
+    bottom = Math.min(0.94, bottom + extra)
   }
   if (bottom - top < 0.05) return null
   return { top, bottom }
 }
 
-function heightOf(model: PageModel, lines: PageLine[]) {
-  const b = bandOf(model, lines, 0)
-  return b ? b.bottom - b.top : 0
-}
-
-function contentLines(model: PageModel): PageLine[] {
-  return model.lines
-    .slice()
-    .sort((a, b) => b.y - a.y)
-    .map((l) => ({ ...l, text: tidyBook(l.text) }))
-    .filter((l) => l.text && !skipBookLine(l.text))
-}
-
-function expandToGap(model: PageModel, band: { top: number; bottom: number }, next?: PageLine) {
-  if (!next) {
-    return { ...band, bottom: Math.min(0.93, band.bottom + 0.02) }
-  }
+function bestSplit(
+  model: PageModel,
+  lines: PageLine[],
+  box: { top: number; bottom: number },
+) {
   const h = model.height || 1
-  const nextTop = (h - next.y - next.h) / h
-  if (nextTop - band.bottom > 0.1 && nextTop - band.bottom < 0.38) {
-    return { ...band, bottom: nextTop - 0.012 }
+  const mid = box.top + (box.bottom - box.top) * 0.5
+  let best = mid
+  let bestGap = 0
+  for (let i = 0; i < lines.length - 1; i++) {
+    const upper = lines[i]
+    const lower = lines[i + 1]
+    const gap = upper.y - upper.h - lower.y
+    const split = (h - lower.y - lower.h / 2) / h
+    const lo = box.top + (box.bottom - box.top) * 0.32
+    const hi = box.top + (box.bottom - box.top) * 0.68
+    if (split < lo || split > hi) continue
+    if (gap > bestGap) {
+      bestGap = gap
+      best = (h - (lower.y + (upper.y - upper.h - lower.y) / 2)) / h
+    }
   }
-  return band
+  return Math.min(box.bottom - 0.08, Math.max(box.top + 0.08, best))
+}
+
+export function pageCrop(model: PageModel): PageCrop | null {
+  const lines = visualLines(model)
+  if (!lines.length) return null
+  const text = tidyBook(lines.map((l) => l.text).join(' '))
+  if (!text || text.length < 8) return null
+  if (isLongQuestion(text) && text.length > 420) return null
+  const box = bandOf(model, lines)
+  if (!box) return null
+  if (box.bottom - box.top <= SPLIT_AT) return { text, left: box }
+  const split = bestSplit(model, lines, box)
+  return {
+    text,
+    left: { top: box.top, bottom: split },
+    right: { top: split, bottom: box.bottom },
+  }
 }
 
 export function cropBands(model: PageModel): CropBand[] {
-  const lines = contentLines(model)
-  if (!lines.length) return []
-
-  const groups: PageLine[][] = []
-  let cur: PageLine[] = []
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    if (cur.length && isSplitLine(line.text) && heightOf(model, cur) >= MIN_H) {
-      groups.push(cur)
-      cur = [line]
-      continue
-    }
-    const next = [...cur, line]
-    if (cur.length && heightOf(model, next) > MAX_H) {
-      groups.push(cur)
-      cur = [line]
-      continue
-    }
-    cur = next
-  }
-  if (cur.length) groups.push(cur)
-
-  const merged: PageLine[][] = []
-  for (const group of groups) {
-    const last = merged[merged.length - 1]
-    if (last && !isSplitLine(group[0].text) && !isSplitLine(last[0].text) && heightOf(model, last) + heightOf(model, group) < MAX_H) {
-      const combo = [...last, ...group]
-      if (heightOf(model, combo) <= MAX_H && !isLongQuestion(combo.map((l) => l.text).join(' '))) {
-        merged[merged.length - 1] = combo
-        continue
-      }
-    }
-    merged.push(group)
-  }
-
-  const out: CropBand[] = []
-  for (let i = 0; i < merged.length; i++) {
-    const group = merged[i]
-    const text = tidyBook(group.map((l) => l.text).join(' '))
-    if (!text || text.length < 12) continue
-    if (isLongQuestion(text)) continue
-    const raw = bandOf(model, group)
-    if (!raw) continue
-    const next = merged[i + 1]?.[0]
-    const box = expandToGap(model, raw, next)
-    out.push({ top: box.top, bottom: box.bottom, text })
-  }
+  const crop = pageCrop(model)
+  if (!crop) return []
+  const out: CropBand[] = [{ ...crop.left, text: crop.text }]
+  if (crop.right) out.push({ ...crop.right, text: crop.text })
   return out
 }

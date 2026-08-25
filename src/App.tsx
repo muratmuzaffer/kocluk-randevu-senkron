@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { WorkBook } from 'xlsx-js-style'
 import {
   compareClass,
   sortByClassThenName,
   themeForClass,
 } from './lib/classes'
-import { go } from './lib/nav'
+import { go, pathOf } from './lib/nav'
 import {
   detectKoclukFile,
   detectLiveFile,
@@ -29,6 +29,14 @@ import {
 } from './lib/schedule'
 import './App.css'
 
+const SlaytPage = lazy(() => import('./SlaytPage.tsx'))
+
+type PageId = 'randevu' | 'slayt'
+
+function pageFromPath(): PageId {
+  return pathOf().startsWith('/slayt') ? 'slayt' : 'randevu'
+}
+
 type SlotItem = {
   time: string
   raw: string
@@ -51,6 +59,23 @@ function App() {
   const [classFilter, setClassFilter] = useState('all')
   const [savedAt, setSavedAt] = useState('')
   const [flash, setFlash] = useState('')
+  const [page, setPage] = useState<PageId>(pageFromPath)
+  const [slaytSeen, setSlaytSeen] = useState(() => pageFromPath() === 'slayt')
+
+  useEffect(() => {
+    const onPop = () => setPage(pageFromPath())
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  useEffect(() => {
+    if (page === 'slayt') setSlaytSeen(true)
+  }, [page])
+
+  function openPage(next: PageId) {
+    setPage(next)
+    go(next === 'slayt' ? '/slayt' : '/')
+  }
 
   useEffect(() => {
     const saved = loadPersisted()
@@ -242,25 +267,22 @@ function App() {
       <header className="home-bar">
         <div className="home-brand">
           <p className="brand">Tarık Can Erdoğan</p>
-          <h1>Randevu tahtam</h1>
+          <h1>{page === 'slayt' ? 'Ders slaytı' : 'Randevu tahtam'}</h1>
         </div>
         <div className="home-actions">
-          {savedLabel ? <span className="pill">Kayıtlı · {savedLabel}</span> : null}
-          <button
-            type="button"
-            className="btn ghost"
-            onClick={() => go('/slayt')}
-          >
-            Ders slaytı
-          </button>
-          <button
-            type="button"
-            className="btn ghost"
-            onClick={() => setShowFiles((v) => !v)}
-          >
-            {showFiles ? 'Dosyaları gizle' : 'Excel yükle / güncelle'}
-          </button>
-          {result ? (
+          {page === 'randevu' && savedLabel ? (
+            <span className="pill">Kayıtlı · {savedLabel}</span>
+          ) : null}
+          {page === 'randevu' ? (
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => setShowFiles((v) => !v)}
+            >
+              {showFiles ? 'Dosyaları gizle' : 'Excel yükle / güncelle'}
+            </button>
+          ) : null}
+          {page === 'randevu' && result ? (
             <button type="button" className="btn ghost" onClick={download}>
               Excel indir
             </button>
@@ -277,6 +299,26 @@ function App() {
         </div>
       </header>
 
+      <nav className="app-tabs" aria-label="Sayfalar">
+        <button
+          type="button"
+          className={page === 'randevu' ? 'on' : ''}
+          aria-current={page === 'randevu' ? 'page' : undefined}
+          onClick={() => openPage('randevu')}
+        >
+          Randevu
+        </button>
+        <button
+          type="button"
+          className={page === 'slayt' ? 'on' : ''}
+          aria-current={page === 'slayt' ? 'page' : undefined}
+          onClick={() => openPage('slayt')}
+        >
+          Ders slaytı
+        </button>
+      </nav>
+
+      <div className={page === 'randevu' ? '' : 'pane-off'}>
       {showFiles && (
         <section className="files-panel">
           <label className={`file-chip ${liveName ? 'on' : ''}`}>
@@ -484,6 +526,15 @@ function App() {
           </section>
         </>
       )}
+      </div>
+
+      {slaytSeen ? (
+        <div className={page === 'slayt' ? '' : 'pane-off'}>
+          <Suspense fallback={<p className="slayt-boot">Slayt yükleniyor…</p>}>
+            <SlaytPage active={page === 'slayt'} />
+          </Suspense>
+        </div>
+      ) : null}
     </div>
   )
 }

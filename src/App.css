@@ -10,7 +10,39 @@
   justify-content: space-between;
   align-items: flex-end;
   gap: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
   margin-bottom: 1rem;
+}
+
+.app-tabs button {
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--grid);
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+
+.app-tabs button:hover {
+  background: var(--header);
+}
+
+.app-tabs button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.pane-off {
+  display: none;
 }
 
 .brand {

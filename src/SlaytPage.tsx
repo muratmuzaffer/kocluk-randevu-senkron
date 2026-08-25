@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { go } from './lib/nav'
 import {
   blendDeck,
   extractPageTexts,
@@ -12,10 +11,13 @@ import {
   type Unit,
 } from './lib/pdfSlides'
 import { downloadUnitPptx } from './lib/pptxFromPages'
-import './App.css'
 import './SlaytPage.css'
 
-export default function SlaytPage() {
+type Props = {
+  active: boolean
+}
+
+export default function SlaytPage({ active }: Props) {
   const pdfRef = useRef<PDFDocumentProxy | null>(null)
   const [fileName, setFileName] = useState('')
   const [status, setStatus] = useState('')
@@ -34,7 +36,7 @@ export default function SlaytPage() {
   const current = deck?.slides[index] ?? null
 
   useEffect(() => {
-    if (!deck) return
+    if (!deck || !active) return
     const total = deck.slides.length
     function onKey(e: KeyboardEvent) {
       if (e.key === 'ArrowLeft') setIndex((n) => Math.max(0, n - 1))
@@ -44,7 +46,7 @@ export default function SlaytPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [deck])
+  }, [deck, active])
 
   useEffect(() => {
     if (!deck || !current || !pdfRef.current) {
@@ -125,28 +127,7 @@ export default function SlaytPage() {
   }
 
   return (
-    <div className="home slayt-home">
-      <header className="home-bar">
-        <div className="home-brand">
-          <p className="brand">Tarık Can Erdoğan</p>
-          <h1>Ders slaytı</h1>
-        </div>
-        <div className="home-actions">
-          <button type="button" className="btn ghost" onClick={() => go('/')}>
-            Randevu tahtası
-          </button>
-          <button
-            type="button"
-            className="btn ghost"
-            onClick={() => {
-              window.location.href = '/__logout'
-            }}
-          >
-            Çıkış yap
-          </button>
-        </div>
-      </header>
-
+    <div className="slayt-pane">
       <p className="slayt-lead">
         Kitap PDF’ini yükleyin, üniteyi seçin. Slayt tek dosyada harmanlanır:
         Hazır mıyız, Başlayalım, konuya giriş, sonra sorular. Konu başlıkları

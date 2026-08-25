@@ -10,7 +10,16 @@ import {
   type Deck,
   type Unit,
 } from './lib/pdfSlides'
-import { downloadUnitPptx } from './lib/pptxFromPages'
+import {
+  contentUrl,
+  coverUrl,
+  downloadUnitPptx,
+  headerTitle,
+  previewAt,
+  previewLength,
+  titleUrl,
+  unitTitle,
+} from './lib/pptxFromPages'
 import './SlaytPage.css'
 
 type Props = {
@@ -33,16 +42,17 @@ export default function SlaytPage({ active }: Props) {
 
   const unit = units.find((u) => u.id === selected) ?? null
   const counts = useMemo(() => (deck ? kindCounts(deck) : null), [deck])
-  const current = deck?.slides[index] ?? null
+  const total = deck ? previewLength(deck) : 0
+  const view = deck ? previewAt(deck, index) : null
+  const current = view?.role === 'content' ? view.slide : null
+  const heading = deck ? unitTitle(deck) : ''
 
   useEffect(() => {
     if (!deck || !active) return
-    const total = deck.slides.length
+    const n = previewLength(deck)
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'ArrowLeft') setIndex((n) => Math.max(0, n - 1))
-      if (e.key === 'ArrowRight') {
-        setIndex((n) => Math.min(total - 1, n + 1))
-      }
+      if (e.key === 'ArrowLeft') setIndex((i) => Math.max(0, i - 1))
+      if (e.key === 'ArrowRight') setIndex((i) => Math.min(n - 1, i + 1))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -55,7 +65,7 @@ export default function SlaytPage({ active }: Props) {
     }
     let cancelled = false
     setPreview('')
-    renderPageDataUrl(pdfRef.current, current.page, 1.25)
+    renderPageDataUrl(pdfRef.current, current.page, 1.35, true)
       .then((url) => {
         if (!cancelled) setPreview(url)
       })
@@ -79,8 +89,8 @@ export default function SlaytPage({ active }: Props) {
     try {
       const pdf = await loadPdf(file)
       pdfRef.current = pdf
-      const pages = await extractPageTexts(pdf, (done, total) => {
-        setStatus(`Sayfalar okunuyor… ${done} / ${total}`)
+      const pages = await extractPageTexts(pdf, (done, all) => {
+        setStatus(`Sayfalar okunuyor… ${done} / ${all}`)
       })
       const found = findUnits(pages)
       setTexts(pages)
@@ -106,7 +116,7 @@ export default function SlaytPage({ active }: Props) {
     setDeck(next)
     setIndex(0)
     setStatus(
-      `${unit.number}. tema harmanlandı: Hazır mıyız → Başlayalım → Konuya giriş → Sorular.`,
+      `${unit.number}. tema MatKeys formatında: kapak, başlık, içerik, kapanış.`,
     )
   }
 
@@ -115,8 +125,8 @@ export default function SlaytPage({ active }: Props) {
     setExporting(true)
     setError('')
     try {
-      await downloadUnitPptx(pdfRef.current, deck, (done, total) => {
-        setStatus(`PowerPoint hazırlanıyor… ${done} / ${total}`)
+      await downloadUnitPptx(pdfRef.current, deck, (done, all) => {
+        setStatus(`PowerPoint hazırlanıyor… ${done} / ${all}`)
       })
       setStatus('İndirme başladı.')
     } catch {
@@ -129,9 +139,8 @@ export default function SlaytPage({ active }: Props) {
   return (
     <div className="slayt-pane">
       <p className="slayt-lead">
-        Kitap PDF’ini yükleyin, üniteyi seçin. Sunum MatKeys formatında hazırlanır:
-        kapak, başlık, kitaptaki sayfalar, kapanış. Akış Hazır mıyız, Başlayalım,
-        konuya giriş, sonra sorular. Konu başlıkları ayrı dosyalara bölünmez.
+        Kitap PDF’ini yükleyin, üniteyi seçin. Önizleme ve indirme MatKeys
+        formatındadır: kapak, başlık slaydı, kitaptaki sayfalar, kapanış.
       </p>
 
       <section className="files-panel slayt-files">
@@ -184,16 +193,17 @@ export default function SlaytPage({ active }: Props) {
 
       {counts && deck ? (
         <div className="slayt-meta">
-          <span className="pill">Kapak {counts.kapak}</span>
+          <span className="pill">MatKeys</span>
+          <span className="pill">Kapak + başlık + kapanış</span>
           <span className="pill">Hazır mıyız {counts.hazir}</span>
           <span className="pill">Başlayalım {counts.basla}</span>
           <span className="pill">Konuya giriş {counts.giris}</span>
           <span className="pill">Sorular {counts.soru}</span>
-          <span className="pill">{deck.slides.length} slayt</span>
+          <span className="pill">{total} slayt</span>
         </div>
       ) : null}
 
-      {deck && current ? (
+      {deck && view ? (
         <section className="slayt-stage">
           <div className="slayt-toolbar">
             <button
@@ -205,16 +215,14 @@ export default function SlaytPage({ active }: Props) {
               Önceki
             </button>
             <p>
-              {index + 1} / {deck.slides.length} · {current.label} · s.{' '}
-              {current.page}
+              {index + 1} / {total} · {view.label}
+              {current ? ` · s. ${current.page}` : ''}
             </p>
             <button
               type="button"
               className="btn ghost"
-              disabled={index >= deck.slides.length - 1}
-              onClick={() =>
-                setIndex((n) => Math.min(deck.slides.length - 1, n + 1))
-              }
+              disabled={index >= total - 1}
+              onClick={() => setIndex((n) => Math.min(total - 1, n + 1))}
             >
               Sonraki
             </button>
@@ -227,20 +235,39 @@ export default function SlaytPage({ active }: Props) {
               {exporting ? 'Hazırlanıyor…' : 'Beğendim, indir'}
             </button>
           </div>
-          <div className="slayt-frame">
-            {preview ? (
-              <img src={preview} alt={`${current.label}, sayfa ${current.page}`} />
-            ) : (
-              <p>Önizleme yükleniyor…</p>
-            )}
+          <div className="mk-slide" data-role={view.role}>
+            {view.role === 'cover' ? (
+              <img className="mk-bg" src={coverUrl} alt="MatKeys kapak" />
+            ) : null}
+            {view.role === 'title' || view.role === 'end' ? (
+              <>
+                <img className="mk-bg" src={titleUrl} alt="" />
+                <p className="mk-title">{heading}</p>
+              </>
+            ) : null}
+            {view.role === 'content' && current ? (
+              <>
+                <img className="mk-bg" src={contentUrl} alt="" />
+                <p className="mk-head">{headerTitle(deck, current.kind)}</p>
+                {preview ? (
+                  <img
+                    className="mk-page"
+                    src={preview}
+                    alt={`${current.label}, sayfa ${current.page}`}
+                  />
+                ) : (
+                  <p className="mk-wait">Sayfa yükleniyor…</p>
+                )}
+              </>
+            ) : null}
           </div>
         </section>
       ) : (
         <section className="empty-home">
           <h2>Ünite slaytı yok</h2>
           <p>
-            PDF yükleyip üniteyi seçin. Önizlemeyi burada görün; beğenirseniz
-            PowerPoint olarak indirin.
+            PDF yükleyip üniteyi seçin. MatKeys kapağını, başlığı ve içerik
+            slaytlarını burada görün; beğenirseniz PowerPoint indirin.
           </p>
         </section>
       )}

@@ -28,11 +28,13 @@ async function urlToData(url: string): Promise<string> {
   })
 }
 
-function unitTitle(deck: Deck) {
+export { coverUrl, titleUrl, contentUrl }
+
+export function unitTitle(deck: Deck) {
   return deck.unit.title.replace(/\s+/g, ' ').trim().toLocaleUpperCase('tr-TR')
 }
 
-function headerTitle(deck: Deck, kind: PageKind) {
+export function headerTitle(deck: Deck, kind: PageKind) {
   return HEADER[kind] || unitTitle(deck)
 }
 
@@ -79,6 +81,24 @@ function addHeaderLabel(slide: PptxGenJS.Slide, title: string) {
     valign: 'middle',
     margin: 0,
   })
+}
+
+export function previewLength(deck: Deck) {
+  return deck.slides.length + 3
+}
+
+export function previewAt(deck: Deck, index: number) {
+  const last = previewLength(deck) - 1
+  if (index <= 0) return { role: 'cover' as const, label: 'MatKeys kapak' }
+  if (index === 1) return { role: 'title' as const, label: 'Başlık' }
+  if (index >= last) return { role: 'end' as const, label: 'Kapanış' }
+  const slide = deck.slides[index - 2]
+  if (!slide) return { role: 'end' as const, label: 'Kapanış' }
+  return {
+    role: 'content' as const,
+    slide,
+    label: slide.label,
+  }
 }
 
 export async function downloadUnitPptx(

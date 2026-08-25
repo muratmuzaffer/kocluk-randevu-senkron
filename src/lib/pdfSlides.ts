@@ -4,6 +4,7 @@ import {
   type PDFDocumentProxy,
 } from 'pdfjs-dist'
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { tidyBook, type PageLine, type PageModel } from './bookCards'
 
 export type {
   Deck,
@@ -17,53 +18,118 @@ export {
   findUnits,
   kindCounts,
 } from './pdfOutline'
+export type { PageModel, PageLine } from './bookCards'
 
 GlobalWorkerOptions.workerSrc = workerSrc
+
+const BOOK_CROP = { x0: 30, y0: 36, x1: 524, y1: 722 }
+
+function joinBits(bits: { x: number; str: string; width: number }[]) {
+  const ordered = [...bits].sort((a, b) => a.x - b.x)
+  let s = ''
+  let end = 0
+  for (const b of ordered) {
+    const t = b.str
+    if (!s) {
+      s = t
+      end = b.x + b.width
+      continue
+    }
+    const gap = b.x - end
+    if ((s.endsWith('-') || s.endsWith('‐')) && /^[a-zçğıöşüı]/i.test(t)) {
+      s = s.replace(/[-‐]$/, '') + t
+    } else if (t === '-' || t === '‐') {
+      s += '-'
+    } else if (gap < 1.5) {
+      s += t
+    } else {
+      s += ' ' + t
+    }
+    end = b.x + b.width
+  }
+  return tidyBook(s)
+}
+
+function mergeHyphen(lines: PageLine[]) {
+  const out: PageLine[] = []
+  for (const line of lines) {
+    const prev = out[out.length - 1]
+    if (
+      prev &&
+      /[A-Za-zÇĞİÖŞÜçğıöşüıI]-$/.test(prev.text) &&
+      /^[a-zçğıöşüı]/.test(line.text)
+    ) {
+      prev.text = prev.text.replace(/-$/, '') + line.text
+      continue
+    }
+    out.push({ ...line })
+  }
+  return out
+}
 
 export async function loadPdf(file: File): Promise<PDFDocumentProxy> {
   const data = await file.arrayBuffer()
   return getDocument({ data, disableAutoFetch: false }).promise
 }
 
+export async function extractPageModels(
+  pdf: PDFDocumentProxy,
+  onProgress?: (done: number, total: number) => void,
+): Promise<PageModel[]> {
+  const total = pdf.numPages
+  const models: PageModel[] = []
+  for (let i = 1; i <= total; i++) {
+    const page = await pdf.getPage(i)
+    const [, , width, height] = page.view
+    const content = await page.getTextContent()
+    const rows: { y: number; h: number; bits: { x: number; str: string; width: number }[] }[] = []
+    for (const item of content.items) {
+      if (!('str' in item) || !item.str) continue
+      const x = item.transform[4]
+      const y = item.transform[5]
+      const h = Math.abs(item.height || item.transform[3] || 10)
+      const w = item.width || 0
+      const last = rows[rows.length - 1]
+      if (last && Math.abs(last.y - y) <= Math.max(3, h * 0.35)) {
+        last.bits.push({ x, str: item.str, width: w })
+        last.h = Math.max(last.h, h)
+      } else {
+        rows.push({ y, h, bits: [{ x, str: item.str, width: w }] })
+      }
+    }
+    rows.sort((a, b) => b.y - a.y)
+    const lines = mergeHyphen(
+      rows.map((row) => ({
+        text: joinBits(row.bits),
+        x: Math.min(...row.bits.map((b) => b.x)),
+        y: row.y,
+        h: row.h,
+      })),
+    ).filter((l) => l.text)
+    models.push({
+      text: lines.map((l) => l.text).join('\n'),
+      lines,
+      width,
+      height,
+    })
+    onProgress?.(i, total)
+  }
+  return models
+}
+
 export async function extractPageTexts(
   pdf: PDFDocumentProxy,
   onProgress?: (done: number, total: number) => void,
 ): Promise<string[]> {
-  const total = pdf.numPages
-  const texts: string[] = []
-  for (let i = 1; i <= total; i++) {
-    const page = await pdf.getPage(i)
-    const content = await page.getTextContent()
-    const lines: { y: number; bits: { x: number; str: string }[] }[] = []
-    for (const item of content.items) {
-      if (!('str' in item) || !item.str) continue
-      const x = item.transform[4]
-      const y = Math.round(item.transform[5])
-      const last = lines[lines.length - 1]
-      if (last && Math.abs(last.y - y) <= 3) last.bits.push({ x, str: item.str })
-      else lines.push({ y, bits: [{ x, str: item.str }] })
-    }
-    lines.sort((a, b) => b.y - a.y)
-    const text = lines
-      .map((line) =>
-        line.bits
-          .sort((a, b) => a.x - b.x)
-          .map((b) => b.str)
-          .join(' '),
-      )
-      .join('\n')
-    texts.push(text)
-    onProgress?.(i, total)
-  }
-  return texts
+  const models = await extractPageModels(pdf, onProgress)
+  return models.map((m) => m.text)
 }
 
-export async function renderPageDataUrl(
+async function renderFull(
   pdf: PDFDocumentProxy,
   pageNumber: number,
-  scale = 1.35,
-  cropBook = false,
-): Promise<string> {
+  scale: number,
+) {
   const page = await pdf.getPage(pageNumber)
   const viewport = page.getViewport({ scale })
   const full = document.createElement('canvas')
@@ -72,13 +138,22 @@ export async function renderPageDataUrl(
   const ctx = full.getContext('2d')
   if (!ctx) throw new Error('Canvas açılamadı.')
   await page.render({ canvasContext: ctx, viewport, canvas: full }).promise
-  if (!cropBook) return full.toDataURL('image/jpeg', 0.84)
+  return { page, viewport, full }
+}
 
+export async function renderPageDataUrl(
+  pdf: PDFDocumentProxy,
+  pageNumber: number,
+  scale = 1.35,
+  cropBook = false,
+): Promise<string> {
+  const { page, viewport, full } = await renderFull(pdf, pageNumber, scale)
+  if (!cropBook) return full.toDataURL('image/jpeg', 0.84)
   const [, , pw, ph] = page.view
-  const x = Math.floor(viewport.width * (30 / pw))
-  const y = Math.floor(viewport.height * (36 / ph))
-  const w = Math.floor(viewport.width * ((524 - 30) / pw))
-  const h = Math.floor(viewport.height * ((722 - 36) / ph))
+  const x = Math.floor(viewport.width * (BOOK_CROP.x0 / pw))
+  const y = Math.floor(viewport.height * (BOOK_CROP.y0 / ph))
+  const w = Math.floor(viewport.width * ((BOOK_CROP.x1 - BOOK_CROP.x0) / pw))
+  const h = Math.floor(viewport.height * ((BOOK_CROP.y1 - BOOK_CROP.y0) / ph))
   const cut = document.createElement('canvas')
   cut.width = Math.max(1, w)
   cut.height = Math.max(1, h)
@@ -86,4 +161,32 @@ export async function renderPageDataUrl(
   if (!cutCtx) throw new Error('Canvas açılamadı.')
   cutCtx.drawImage(full, x, y, w, h, 0, 0, w, h)
   return cut.toDataURL('image/jpeg', 0.86)
+}
+
+export async function renderBandDataUrl(
+  pdf: PDFDocumentProxy,
+  pageNumber: number,
+  top: number,
+  bottom: number,
+  scale = 2,
+): Promise<string> {
+  const { page, viewport, full } = await renderFull(pdf, pageNumber, scale)
+  const [, , , ph] = page.view
+  const yPdfTop = ph * (1 - top)
+  const yPdfBot = ph * (1 - bottom)
+  const [x0] = viewport.convertToViewportPoint(BOOK_CROP.x0, yPdfTop)
+  const [x1] = viewport.convertToViewportPoint(BOOK_CROP.x1, yPdfTop)
+  const [, yA] = viewport.convertToViewportPoint(BOOK_CROP.x0, yPdfTop)
+  const [, yB] = viewport.convertToViewportPoint(BOOK_CROP.x0, yPdfBot)
+  const x = Math.floor(Math.min(x0, x1))
+  const w = Math.max(8, Math.floor(Math.abs(x1 - x0)))
+  const y = Math.floor(Math.min(yA, yB))
+  const h = Math.max(8, Math.floor(Math.abs(yA - yB)))
+  const cut = document.createElement('canvas')
+  cut.width = w
+  cut.height = h
+  const cutCtx = cut.getContext('2d')
+  if (!cutCtx) throw new Error('Canvas açılamadı.')
+  cutCtx.drawImage(full, x, y, w, h, 0, 0, w, h)
+  return cut.toDataURL('image/jpeg', 0.88)
 }

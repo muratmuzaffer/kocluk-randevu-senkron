@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import {
   blendDeck,
-  extractPageTexts,
+  extractPageModels,
   findUnits,
   kindCounts,
   loadPdf,
+  renderBandDataUrl,
   type Deck,
+  type PageModel,
   type Unit,
 } from './lib/pdfSlides'
 import {
@@ -32,11 +34,12 @@ export default function SlaytPage({ active }: Props) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [units, setUnits] = useState<Unit[]>([])
-  const [texts, setTexts] = useState<string[]>([])
+  const [models, setModels] = useState<PageModel[]>([])
   const [selected, setSelected] = useState('')
   const [deck, setDeck] = useState<Deck | null>(null)
   const [index, setIndex] = useState(0)
   const [exporting, setExporting] = useState(false)
+  const [figure, setFigure] = useState('')
 
   const unit = units.find((u) => u.id === selected) ?? null
   const counts = useMemo(() => (deck ? kindCounts(deck) : null), [deck])
@@ -61,10 +64,38 @@ export default function SlaytPage({ active }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [deck, active])
 
+  useEffect(() => {
+    if (
+      !current ||
+      !pdfRef.current ||
+      current.figureTop == null ||
+      current.figureBottom == null
+    ) {
+      setFigure('')
+      return
+    }
+    let cancelled = false
+    renderBandDataUrl(
+      pdfRef.current,
+      current.page,
+      current.figureTop,
+      current.figureBottom,
+    )
+      .then((url) => {
+        if (!cancelled) setFigure(url)
+      })
+      .catch(() => {
+        if (!cancelled) setFigure('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [current])
+
   async function onFile(file: File) {
     setError('')
     setUnits([])
-    setTexts([])
+    setModels([])
     setDeck(null)
     setSelected('')
     setFileName(file.name)
@@ -73,11 +104,11 @@ export default function SlaytPage({ active }: Props) {
     try {
       const pdf = await loadPdf(file)
       pdfRef.current = pdf
-      const pages = await extractPageTexts(pdf, (done, all) => {
+      const pages = await extractPageModels(pdf, (done, all) => {
         setStatus(`Sayfalar okunuyor… ${done} / ${all}`)
       })
-      const found = findUnits(pages)
-      setTexts(pages)
+      const found = findUnits(pages.map((p) => p.text))
+      setModels(pages)
       setUnits(found)
       if (found[0]) setSelected(found[0].id)
       setStatus(
@@ -94,9 +125,9 @@ export default function SlaytPage({ active }: Props) {
   }
 
   function makeDeck() {
-    if (!unit || !texts.length) return
+    if (!unit || !models.length) return
     setError('')
-    const next = blendDeck(unit, texts)
+    const next = blendDeck(unit, models)
     setDeck(next)
     setIndex(0)
     setStatus(
@@ -123,8 +154,8 @@ export default function SlaytPage({ active }: Props) {
   return (
     <div className="slayt-pane">
       <p className="slayt-lead">
-        Kitap PDF’ini yükleyin, üniteyi seçin. Soru kitaptan alınır, şıklar
-        altına yazılır; cümleler değiştirilmez. Her soru ayrı slayttır.
+        Kitap PDF’ini yükleyin, üniteyi seçin. Metin kitaptan birebir alınır;
+        örnek, adım ve soru ayrı slayta bölünür. Şekiller kitaptan kesilir.
       </p>
 
       <section className="files-panel slayt-files">
@@ -233,17 +264,30 @@ export default function SlaytPage({ active }: Props) {
               <>
                 <img className="mk-bg" src={contentUrl} alt="" />
                 <p className="mk-head">{headerTitle(deck, current)}</p>
-                <div className="mk-card">
-                  <p className="mk-prompt">{current.prompt}</p>
-                  {current.choices.length ? (
-                    <ul
-                      className={`mk-choices cols-${current.choices.length > 3 ? 2 : 1}`}
-                    >
-                      {current.choices.map((choice) => (
-                        <li key={choice}>{choice}</li>
-                      ))}
-                    </ul>
+                <div className={`mk-card ${figure ? 'with-fig' : ''}`}>
+                  {figure ? (
+                    <img className="mk-fig" src={figure} alt="" />
                   ) : null}
+                  <div className="mk-copy">
+                    {current.pill ? <span className="mk-pill">{current.pill}</span> : null}
+                    {current.prompt ? <p className="mk-prompt">{current.prompt}</p> : null}
+                    {current.bullets.length ? (
+                      <ul className="mk-bullets">
+                        {current.bullets.map((bit) => (
+                          <li key={bit}>{bit}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {current.choices.length ? (
+                      <ul
+                        className={`mk-choices cols-${current.choices.length > 3 && !figure ? 2 : 1}`}
+                      >
+                        {current.choices.map((choice) => (
+                          <li key={choice}>{choice}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
                 </div>
               </>
             ) : null}
@@ -253,8 +297,8 @@ export default function SlaytPage({ active }: Props) {
         <section className="empty-home">
           <h2>Ünite slaytı yok</h2>
           <p>
-            PDF yükleyip üniteyi seçin. Sorular kitaptan birebir alınır, slaytta
-            düzenli yazılır; beğenirseniz PowerPoint indirin.
+            PDF yükleyip üniteyi seçin. Kitap cümleleri ve görselleri slaytta
+            düzenli görünür; beğenirseniz PowerPoint indirin.
           </p>
         </section>
       )}

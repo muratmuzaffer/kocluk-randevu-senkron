@@ -1,4 +1,4 @@
-import { parseCards } from './bookCards'
+import { parseCards, stringModel, type PageModel } from './bookCards'
 
 export type PageKind = 'kapak' | 'hazir' | 'basla' | 'giris' | 'soru'
 
@@ -20,6 +20,10 @@ export type DeckSlide = {
   face: SlideFace
   prompt: string
   choices: string[]
+  bullets: string[]
+  pill: string
+  figureTop?: number
+  figureBottom?: number
 }
 
 export type Deck = {
@@ -255,7 +259,11 @@ export function findUnits(pages: string[]): Unit[] {
   }))
 }
 
-export function blendDeck(unit: Unit, pages: string[]): Deck {
+export function blendDeck(unit: Unit, pages: string[] | PageModel[]): Deck {
+  const models: PageModel[] = pages.map((p) =>
+    typeof p === 'string' ? stringModel(p) : p,
+  )
+  const texts = models.map((m) => m.text)
   const slides: DeckSlide[] = []
   let heading = unit.title
   let kind: PageKind = 'giris'
@@ -270,11 +278,13 @@ export function blendDeck(unit: Unit, pages: string[]): Deck {
       face: 'title',
       prompt: '',
       choices: [],
+      bullets: [],
+      pill: '',
     })
   }
 
   for (let page = unit.start; page <= unit.end; page++) {
-    const text = pages[page - 1] || ''
+    const text = texts[page - 1] || ''
     if (isJunkPage(text)) continue
     const raw = rawKind(text)
     if (raw === 'olcme') olcmeStarted = true
@@ -286,7 +296,7 @@ export function blendDeck(unit: Unit, pages: string[]): Deck {
       kind = next.kind
       if (heading !== unit.title) pushTitle(kind, heading)
     }
-    const cards = parseCards(text)
+    const cards = parseCards(text, models[page - 1])
     if (cards.length === 0) continue
     for (const card of cards) {
       slides.push({
@@ -297,14 +307,19 @@ export function blendDeck(unit: Unit, pages: string[]): Deck {
         face: 'card',
         prompt: card.prompt,
         choices: card.choices,
+        bullets: card.bullets,
+        pill: card.pill,
+        figureTop: card.figureTop,
+        figureBottom: card.figureBottom,
       })
     }
   }
 
   if (slides.length === 0) {
     const fallback = [...Array(unit.end - unit.start + 1)].map((_, i) => unit.start + i)
-      .find((p) => !isJunkPage(pages[p - 1] || ''))
+      .find((p) => !isJunkPage(texts[p - 1] || ''))
     if (fallback) {
+      const card = parseCards(texts[fallback - 1] || '', models[fallback - 1])[0]
       pushTitle('giris', unit.title)
       slides.push({
         kind: 'giris',
@@ -312,8 +327,10 @@ export function blendDeck(unit: Unit, pages: string[]): Deck {
         label: KIND_LABEL.giris,
         heading: unit.title,
         face: 'card',
-        prompt: parseCards(pages[fallback - 1] || '')[0]?.prompt || unit.title,
-        choices: parseCards(pages[fallback - 1] || '')[0]?.choices || [],
+        prompt: card?.prompt || unit.title,
+        choices: card?.choices || [],
+        bullets: card?.bullets || [],
+        pill: card?.pill || '',
       })
     }
   }

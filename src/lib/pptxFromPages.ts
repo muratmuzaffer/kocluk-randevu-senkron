@@ -2,6 +2,7 @@ import PptxGenJS from 'pptxgenjs'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import {
   CANONICAL_TITLES,
+  renderBandDataUrl,
   type Deck,
   type DeckSlide,
 } from './pdfSlides'
@@ -65,35 +66,103 @@ function addSectionTitle(slide: PptxGenJS.Slide, title: string) {
   })
 }
 
-function addCard(slide: PptxGenJS.Slide, prompt: string, choices: string[]) {
-  const promptSize = prompt.length > 220 ? 20 : prompt.length > 140 ? 24 : 28
-  slide.addText(prompt, {
-    x: 0.55,
-    y: 1.15,
-    w: 18.9,
-    h: choices.length ? 3.4 : 8.8,
-    fontFace: 'Calibri',
-    fontSize: promptSize,
-    bold: true,
-    color: '1A1A1A',
-    valign: 'top',
-    margin: 0,
-  })
-  if (!choices.length) return
+function addCard(slide: PptxGenJS.Slide, item: DeckSlide, figureData?: string) {
+  const hasChoices = item.choices.length > 0
+  const hasBullets = item.bullets.length > 0
+  const hasFigure = Boolean(figureData)
+  const textX = hasFigure ? 10.2 : 0.55
+  const textW = hasFigure ? 9.25 : 18.9
+  let y = 1.12
+  if (item.pill) {
+    slide.addShape('roundRect', {
+      x: textX,
+      y,
+      w: Math.min(4.6, 0.28 * item.pill.length + 1.4),
+      h: 0.42,
+      fill: { color: '5170FF' },
+      line: { color: '5170FF' },
+      rectRadius: 0.08,
+    })
+    slide.addText(item.pill, {
+      x: textX,
+      y,
+      w: Math.min(4.6, 0.28 * item.pill.length + 1.4),
+      h: 0.42,
+      fontFace: 'Calibri',
+      fontSize: 14,
+      bold: true,
+      color: 'FFFFFF',
+      align: 'center',
+      valign: 'middle',
+      margin: 0,
+    })
+    y += 0.55
+  }
+  if (hasFigure && figureData) {
+    slide.addImage({
+      data: figureData,
+      x: 0.45,
+      y: 1.15,
+      w: 9.4,
+      h: 8.7,
+      sizing: { type: 'contain', w: 9.4, h: 8.7 },
+    })
+  }
+  if (item.prompt) {
+    const promptSize = item.prompt.length > 220 ? 16 : item.prompt.length > 140 ? 20 : 24
+    slide.addText(item.prompt, {
+      x: textX,
+      y,
+      w: textW,
+      h: hasChoices || hasBullets ? 2.6 : 8.5 - (y - 1.12),
+      fontFace: 'Calibri',
+      fontSize: promptSize,
+      bold: true,
+      color: '1A1A1A',
+      valign: 'top',
+      margin: 0,
+    })
+    y += hasChoices || hasBullets ? 2.75 : 0
+  }
+  if (hasBullets) {
+    slide.addText(
+      item.bullets.map((bit) => ({
+        text: bit,
+        options: {
+          bullet: true,
+          breakLine: true,
+          fontFace: 'Calibri',
+          fontSize: 22,
+          bold: true,
+          color: '1A1A1A',
+        },
+      })),
+      {
+        x: textX,
+        y,
+        w: textW,
+        h: 8.9 - y,
+        valign: 'top',
+        paraSpaceAfter: 10,
+      },
+    )
+    return
+  }
+  if (!hasChoices) return
   const colors = ['5170FF', '54A03A', 'ED7D31', '2E75B6']
-  const cols = choices.length <= 3 ? 1 : 2
-  const rows = Math.ceil(choices.length / cols)
-  const gap = 0.22
-  const boxW = cols === 1 ? 18.9 : (18.9 - gap) / 2
-  const boxH = Math.min(2.15, (5.3 - gap * (rows - 1)) / rows)
-  choices.forEach((choice, i) => {
+  const cols = item.choices.length <= 3 || hasFigure ? 1 : 2
+  const rows = Math.ceil(item.choices.length / cols)
+  const gap = 0.18
+  const boxW = cols === 1 ? textW : (textW - gap) / 2
+  const boxH = Math.min(1.7, (8.95 - y - gap * (rows - 1)) / rows)
+  item.choices.forEach((choice, i) => {
     const col = cols === 1 ? 0 : i % 2
     const row = cols === 1 ? i : Math.floor(i / 2)
-    const x = 0.55 + col * (boxW + gap)
-    const y = 4.7 + row * (boxH + gap)
+    const x = textX + col * (boxW + gap)
+    const cy = y + row * (boxH + gap)
     slide.addShape('roundRect', {
       x,
-      y,
+      y: cy,
       w: boxW,
       h: boxH,
       fill: { color: 'F7F9FC' },
@@ -101,12 +170,12 @@ function addCard(slide: PptxGenJS.Slide, prompt: string, choices: string[]) {
       rectRadius: 0.12,
     })
     slide.addText(choice, {
-      x: x + 0.2,
-      y: y + 0.12,
-      w: boxW - 0.4,
-      h: boxH - 0.24,
+      x: x + 0.16,
+      y: cy + 0.08,
+      w: boxW - 0.32,
+      h: boxH - 0.16,
       fontFace: 'Calibri',
-      fontSize: choice.length > 80 ? 16 : 20,
+      fontSize: choice.length > 70 ? 14 : 18,
       bold: true,
       color: '1A1A1A',
       valign: 'middle',
@@ -160,7 +229,7 @@ export function previewAt(deck: Deck, index: number) {
 }
 
 export async function downloadUnitPptx(
-  _pdf: PDFDocumentProxy,
+  pdf: PDFDocumentProxy,
   deck: Deck,
   onProgress?: (done: number, total: number) => void,
 ) {
@@ -194,7 +263,24 @@ export async function downloadUnitPptx(
     } else {
       addBackground(slide, contentBg)
       addHeaderLabel(slide, headerTitle(deck, item))
-      addCard(slide, item.prompt, item.choices)
+      let figureData = ''
+      if (
+        item.figureTop != null &&
+        item.figureBottom != null &&
+        item.figureBottom - item.figureTop > 0.08
+      ) {
+        try {
+          figureData = await renderBandDataUrl(
+            pdf,
+            item.page,
+            item.figureTop,
+            item.figureBottom,
+          )
+        } catch {
+          figureData = ''
+        }
+      }
+      addCard(slide, item, figureData)
     }
     onProgress?.(i + 1, total)
   }

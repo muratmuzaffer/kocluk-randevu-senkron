@@ -138,17 +138,61 @@
   width: 95%;
   height: 80%;
   display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
+  gap: 1rem;
   color: #1a1a1a;
+}
+
+.mk-card.with-fig {
+  align-items: stretch;
+}
+
+.mk-fig {
+  width: 46%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center top;
+  background: #fff;
+  border-radius: 10px;
+}
+
+.mk-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.mk-pill {
+  align-self: flex-start;
+  padding: 0.18rem 0.7rem;
+  border-radius: 999px;
+  background: #5170ff;
+  color: #fff;
+  font-family: Calibri, 'Segoe UI', sans-serif;
+  font-size: clamp(0.7rem, 1.3vw, 1rem);
+  font-weight: 700;
 }
 
 .mk-prompt {
   margin: 0;
   font-family: Calibri, 'Segoe UI', sans-serif;
-  font-size: clamp(1rem, 2.1vw, 1.75rem);
+  font-size: clamp(0.95rem, 1.9vw, 1.55rem);
   font-weight: 700;
   line-height: 1.28;
+}
+
+.mk-bullets {
+  margin: 0;
+  padding: 0 0 0 1.3rem;
+  font-family: Calibri, 'Segoe UI', sans-serif;
+  font-size: clamp(0.9rem, 1.7vw, 1.35rem);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.mk-bullets li {
+  margin: 0 0 0.45rem;
 }
 
 .mk-choices {

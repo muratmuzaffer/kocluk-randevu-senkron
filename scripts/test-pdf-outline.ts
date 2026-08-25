@@ -1,4 +1,4 @@
-import { parseCards } from '../src/lib/bookCards.ts'
+import { parseCards, tidyBook } from '../src/lib/bookCards.ts'
 import { blendDeck, findUnits } from '../src/lib/pdfOutline.ts'
 
 function assert(cond: unknown, msg: string) {
@@ -13,6 +13,29 @@ assert(q[0].prompt.includes('Remzi eşitliği korumak'), q[0].prompt)
 assert(q[0].choices.length === 4, `choices ${q[0].choices.join(' | ')}`)
 assert(q[0].choices[0] === 'A) Toplama', q[0].choices[0])
 assert(q[0].choices[3] === 'D) Bölme', q[0].choices[3])
+
+const wall = `İSTATİSTİKSEL ARAŞTIRMA SÜRECİ
+İstatistiksel araştırma süreci dört adımdan oluşur.
+1. Adım Verilerin toplanması
+2. Adım Verilerin düzenlenmesi
+3. Adım Verilerin analizi
+4. Adım Sonuçların yorumlanması
+Örnek 1
+İpek, sınıfındaki öğrencilerin en sevdikleri mevsimi merak etmektedir.`
+const parts = parseCards(wall)
+assert(
+  parts.some((c) => c.bullets.length === 4),
+  `steps ${JSON.stringify(parts)}`,
+)
+assert(
+  parts.some((c) => /örnek 1/i.test(c.pill) && c.prompt.includes('İpek')),
+  `ornek ${parts.map((c) => c.pill + ':' + c.prompt).join(' || ')}`,
+)
+assert(
+  parts.every((c) => !(c.prompt.includes('İpek') && c.prompt.includes('1. Adım'))),
+  'no wall',
+)
+assert(tidyBook('topla - ma işlemi') === 'toplama işlemi', 'hyphen')
 
 const two = parseCards(
   '1) Birinci soru nedir? A) 1 B) 2 C) 3 D) 4 2) İkinci soru hangisidir? A) 5 B) 6 C) 7 D) 8',

@@ -21,7 +21,9 @@ export type BookCard = {
   figureBottom?: number
 }
 
-const MAX_BODY = 260
+const MAX_BODY = 880
+const CITIES =
+  /şanlıurfa|manisa|istanbul|erzurum|denizli|ankara|adana|izmir|bursa|antalya|konya|gaziantep/i
 
 function fold(text: string) {
   return text
@@ -67,6 +69,114 @@ function looksLikeQuestion(text: string) {
   )
 }
 
+function isTableCellLine(line: string) {
+  const s = line.trim()
+  if (/^(kadın|erkek|toplam)\b/i.test(s) && (/\d/.test(s) || s.split(/\s+/).length <= 2)) return true
+  if (/cinsiyet/i.test(s) && /nüfus/i.test(s) && s.length < 80) return true
+  if (/yüzdesi\s*\(%\)/i.test(s) && s.length < 56) return true
+  if (/^\d{1,3}(?:\s\d{3}){2,}(?:\s*%\s*\d+)?$/.test(s)) return true
+  if (/^%\s*\d{1,3}$/.test(s)) return true
+  return false
+}
+
+function isGarbageLine(line: string) {
+  if (line.includes('\uFFFD')) return true
+  if (/^[A-Da-d]\s*[)]/.test(line.trim())) return false
+  if (/^\d{1,2}\s*[.)]\s+\S/.test(line.trim())) return false
+  if (isTableCellLine(line)) return true
+  const t = fold(line)
+  if (/^GRAFIK\s*:/.test(t) && line.length < 80) return true
+  const cityHits = line.match(
+    /Şanlıurfa|Manisa|İstanbul|Erzurum|Denizli|Ankara|Adana|İzmir|Bursa|Antalya/gi,
+  )
+  if ((cityHits?.length || 0) >= 3 && !/[.?!]/.test(line)) return true
+  if (CITIES.test(line) && line.split(/\s+/).length <= 8 && !/[.?!]/.test(line)) return true
+  const letters = (line.match(/[A-Za-zÇĞİÖŞÜçğıöşü]/g) || []).length
+  const digits = (line.match(/\d/g) || []).length
+  if (letters > 0 && digits > letters * 0.8 && !/[.?!]/.test(line) && line.length > 12) return true
+  if (/grafk|ktap|satılan kt/i.test(line)) return true
+  return false
+}
+
+function wantsTable(text: string) {
+  return fold(text).includes('TABLO')
+}
+
+function wantsChart(text: string) {
+  const t = fold(text)
+  return t.includes('GRAFIK') || t.includes('SEKIL') || t.includes('DIYAGRAM')
+}
+
+export function isOcrJunkPage(text: string) {
+  if ((text.match(/\uFFFD/g) || []).length >= 2) return true
+  if (/grafk|satılan kt|ktapçıda|ktap tur/i.test(text)) return true
+  const cities = text.match(
+    /Şanlıurfa|Manisa|İstanbul|Erzurum|Denizli|Ankara|Adana|İzmir|Bursa|Antalya|Konya/gi,
+  )
+  const sentences = (text.match(/[.?!]/g) || []).length
+  if ((cities?.length || 0) >= 4 && sentences < 2) return true
+  const t = fold(text)
+  if (t.includes('GRAFIK:') && (cities?.length || 0) >= 3) return true
+  return false
+}
+
+function stripTableDump(text: string) {
+  return tidyBook(
+    text
+      .replace(/Yaklaşık\s+Cinsiyet[\s\S]*?(?=(Tablo:|Tartışınız|$))/gi, ' ')
+      .replace(/Cinsiyet\s+Nüfus\s+Yüzdesi[\s\S]*?(?=(Tablo:|Tartışınız|$))/gi, ' ')
+      .replace(/\b(Kadın|Erkek|TOPLAM)\s+[\d\s.]{5,}\s*%\s*\d+/gi, ' '),
+  )
+}
+
+function isProse(card: BookCard) {
+  return (
+    !card.choices.length &&
+    !card.bullets.length &&
+    !card.pill &&
+    !looksLikeQuestion(card.prompt)
+  )
+}
+
+function mergeProse(cards: BookCard[]) {
+  const out: BookCard[] = []
+  for (const card of cards) {
+    const last = out[out.length - 1]
+    const combined = last ? last.prompt.length + card.prompt.length + 1 : 0
+    const orphan = last ? last.prompt.length < 220 || card.prompt.length < 220 : false
+    if (
+      last &&
+      isProse(last) &&
+      isProse(card) &&
+      (combined <= MAX_BODY || (orphan && combined <= MAX_BODY + 320))
+    ) {
+      last.prompt = tidyBook(`${last.prompt} ${card.prompt}`)
+      if (card.figureTop != null && last.figureTop == null) {
+        last.figureTop = card.figureTop
+        last.figureBottom = card.figureBottom
+      }
+      continue
+    }
+    out.push({ ...card })
+  }
+  return out
+}
+
+function tableBand(model: PageModel) {
+  const cells = model.lines.filter((l) => isTableCellLine(tidyBook(l.text)))
+  const captions = model.lines.filter((l) => /^tablo\s*:/i.test(tidyBook(l.text)))
+  const bits = cells.length >= 2 ? [...cells, ...captions] : cells
+  if (bits.length < 2) return null
+  const h = model.height || 1
+  const yMax = Math.max(...bits.map((c) => c.y + c.h))
+  const yMin = Math.min(...bits.map((c) => c.y))
+  const pad = h * 0.04
+  return {
+    top: Math.max(0.08, (h - yMax - pad) / h),
+    bottom: Math.min(0.9, (h - yMin + pad) / h),
+  }
+}
+
 function isHeaderNoise(text: string) {
   const t = fold(tidyBook(text)).replace(/ \d{2,3}$/, '').trim()
   if (/^(HAZIR MIYIZ|BASLAYALIM)\??$/.test(t)) return true
@@ -92,6 +202,7 @@ function isChromeLine(line: string) {
   if (t.includes('OZET ICERIGE')) return true
   if (/^\d+\s*\.\s*TEMA\b/.test(t) && t.length < 36) return true
   if (t.includes('OLCME VE DEGERLENDIRME') && !looksLikeQuestion(line)) return true
+  if (isGarbageLine(line)) return true
   return isHeaderNoise(line)
 }
 
@@ -102,12 +213,14 @@ function markerOf(line: string): 'example' | 'activity' | 'step' | 'question' | 
   if (/^\d{1,2}\s*[.)]\s*adım\b/i.test(s)) return 'step'
   if (/^[A-Da-d]\s*[)]\s+\S/.test(s)) return 'choice'
   if (/^\d{1,2}\s*[.)]\s+\S/.test(s) && looksLikeQuestion(s)) return 'question'
+  if (/^tablo\s*:/i.test(s) || /^grafik\s*:/i.test(s)) return 'body'
   if (
     s.length > 8 &&
     s.length < 52 &&
     s === s.toLocaleUpperCase('tr-TR') &&
     /[A-ZÇĞİÖŞÜ]/.test(s) &&
-    s.split(/\s+/).length >= 2
+    s.split(/\s+/).length >= 2 &&
+    !/[.?!]/.test(s)
   ) {
     return 'heading'
   }
@@ -133,6 +246,16 @@ function packSentences(parts: string[], max = MAX_BODY) {
     }
   }
   if (buf) out.push(buf)
+  while (out.length >= 2 && out[out.length - 1].length < 200) {
+    const tail = out.pop()!
+    const prev = out[out.length - 1]
+    if (prev.length + tail.length + 1 <= max + 320) {
+      out[out.length - 1] = `${prev} ${tail}`
+    } else {
+      out.push(tail)
+      break
+    }
+  }
   return out
 }
 
@@ -196,10 +319,13 @@ function attachFigure(card: BookCard, figs: { top: number; bottom: number }[]) {
 }
 
 function emitBody(text: string, pill: string, cards: BookCard[]) {
-  if (isHeaderNoise(text)) return
-  const packed = packSentences(sentencesOf(text))
+  if (isHeaderNoise(text) || isGarbageLine(text)) return
+  const cleaned = stripTableDump(text)
+  if (cleaned.length < 18) return
+  const packed = packSentences(sentencesOf(cleaned))
   for (const prompt of packed) {
-    if (prompt.length < 18) continue
+    if (prompt.length < 24) continue
+    if (isGarbageLine(prompt)) continue
     cards.push({ prompt, choices: [], bullets: [], pill })
   }
 }
@@ -290,26 +416,23 @@ export function parseCards(raw: string, model?: PageModel): BookCard[] {
     }
   }
 
-  const figs = model ? figuresOn(model) : []
-  const cleaned = cards.filter(
-    (c) => c.prompt.length >= 12 || c.choices.length >= 2 || c.bullets.length >= 2,
-  )
-  if (!cleaned.length && figs.length) {
-    return [
-      {
-        prompt: '',
-        choices: [],
-        bullets: [],
-        pill: '',
-        figureTop: figs[0].top,
-        figureBottom: figs[0].bottom,
-      },
-    ]
-  }
-  if (!figs.length) return cleaned
-  return cleaned.map((c, idx) =>
-    idx === 0 || c.pill || c.choices.length >= 2 ? attachFigure(c, figs) : c,
-  )
+  const tableFig = model ? tableBand(model) : null
+  const gapFigs = model ? figuresOn(model) : []
+  return mergeProse(
+    cards.filter(
+      (c) =>
+        !isGarbageLine(c.prompt) &&
+        !isOcrJunkPage(c.prompt) &&
+        (c.prompt.length >= 24 || c.choices.length >= 2 || c.bullets.length >= 2),
+    ),
+  ).map((c) => {
+    const prompt = stripTableDump(c.prompt)
+    const table = wantsTable(prompt) || wantsTable(c.pill)
+    const chart = wantsChart(prompt) || wantsChart(c.pill)
+    if (table && tableFig) return attachFigure({ ...c, prompt }, [tableFig])
+    if ((table || chart) && gapFigs.length) return attachFigure({ ...c, prompt }, gapFigs)
+    return { ...c, prompt }
+  })
 }
 
 export function stringModel(text: string): PageModel {

@@ -1,4 +1,4 @@
-import { parseCards, stringModel, type PageModel } from './bookCards'
+import { isOcrJunkPage, parseCards, stringModel, type PageModel } from './bookCards'
 
 export type PageKind = 'kapak' | 'hazir' | 'basla' | 'giris' | 'soru'
 
@@ -120,6 +120,7 @@ function isJunkTitle(text: string) {
 
 function isJunkPage(text: string) {
   if (isTocLike(text)) return true
+  if (isOcrJunkPage(text)) return true
   const t = fold(text)
   if (t.includes('KAREKODU OKUTARAK')) return true
   if (t.includes('BU TEMADA') && t.includes('BEKLENMEKTEDIR')) return true

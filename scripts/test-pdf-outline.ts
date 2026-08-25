@@ -37,6 +37,36 @@ assert(
 )
 assert(tidyBook('topla - ma işlemi') === 'toplama işlemi', 'hyphen')
 
+const tuikLines = [
+  'Bu istatistiki bilgiler; kurum ve kişilerin karar alma aşamalarında ulaşabilecekleri hazır veriler sunar.',
+  'TÜİK, Adrese Dayalı Nüfus Sistemi Sonuçları isimli araştırmasını 2023 yılında paylaşmıştır.',
+  "Bu araştırma sonucuna göre Türkiye'de yaşayan nüfus, 31 Aralık 2023 tarihi itibarıyla bir önceki yıla göre 92 bin 824 kişi artmıştır.",
+  "Türkiye'nin nüfusu 85 milyon 372 bin 377 kişi olmuştur.",
+  'Aşağıdaki tabloda ilgili yıla ait nüfus verisi görülmektedir.',
+  'Tablo: 2023 Yılına Ait Nüfus Verisinin Cinsiyete Göre Dağılımı',
+  'Yaklaşık Cinsiyet Nüfus Yüzdesi (%)',
+  'Kadın 42 638 306 %50',
+  'Erkek 42 734 071 %50',
+]
+const tuikModel = {
+  text: tuikLines.join('\n'),
+  width: 500,
+  height: 800,
+  lines: tuikLines.map((text, i) => ({ text, x: 40, y: 720 - i * 28, h: 14 })),
+}
+const tuikCards = parseCards(tuikModel.text, tuikModel)
+assert(tuikCards.length === 1, `tuik slides ${tuikCards.length} ${tuikCards.map((c) => c.prompt).join(' || ')}`)
+assert(tuikCards[0].prompt.includes('hazır veriler'), tuikCards[0].prompt)
+assert(tuikCards[0].prompt.includes('TÜİK'), tuikCards[0].prompt)
+assert(tuikCards[0].prompt.includes('tabloda'), tuikCards[0].prompt)
+assert(!tuikCards[0].prompt.includes('42 638 306'), tuikCards[0].prompt)
+assert(tuikCards[0].figureTop != null, 'tuik table figure')
+
+const junk = parseCards(
+  'Grafik: Bir Kitapçıda Satılan Kitap Türleri Şanlıurfa Manisa İstanbul Erzurum Denizli Ankara Adana',
+)
+assert(junk.length === 0, `junk ${junk.map((c) => c.prompt).join(' | ')}`)
+
 const two = parseCards(
   '1) Birinci soru nedir? A) 1 B) 2 C) 3 D) 4 2) İkinci soru hangisidir? A) 5 B) 6 C) 7 D) 8',
 )

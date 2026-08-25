@@ -1,0 +1,3 @@
+{
+  "rewrites": [{ "source": "/slayt", "destination": "/index.html" }]
+}

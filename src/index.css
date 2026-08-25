@@ -39,6 +39,13 @@ body {
     linear-gradient(180deg, #dfe6ee 0%, var(--bg) 180px, var(--bg) 100%);
 }
 
+.slayt-boot {
+  margin: 2rem auto;
+  width: min(1240px, calc(100% - 1.5rem));
+  color: var(--ink);
+  font-weight: 600;
+}
+
 button,
 input {
   font: inherit;

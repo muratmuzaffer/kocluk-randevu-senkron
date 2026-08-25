@@ -1,0 +1,76 @@
+.slayt-lead {
+  margin: 0 0 1rem;
+  max-width: 46rem;
+  color: var(--muted);
+}
+
+.slayt-files {
+  grid-template-columns: 1.2fr 1.4fr auto;
+}
+
+.slayt-select {
+  border: 1px solid var(--grid);
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+  background: #fff;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.slayt-status {
+  margin: 0 0 0.85rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.slayt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+}
+
+.slayt-stage {
+  background: #fff;
+  border: 1px solid var(--grid);
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+.slayt-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.slayt-toolbar p {
+  margin: 0;
+  flex: 1;
+  min-width: 10rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.slayt-frame {
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  background: var(--header);
+  border: 1px solid var(--grid);
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.slayt-frame img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 800px) {
+  .slayt-files {
+    grid-template-columns: 1fr;
+  }
+}

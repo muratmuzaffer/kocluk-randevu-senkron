@@ -5,6 +5,7 @@ import {
   sortByClassThenName,
   themeForClass,
 } from './lib/classes'
+import { go } from './lib/nav'
 import {
   detectKoclukFile,
   detectLiveFile,
@@ -245,6 +246,13 @@ function App() {
         </div>
         <div className="home-actions">
           {savedLabel ? <span className="pill">Kayıtlı · {savedLabel}</span> : null}
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => go('/slayt')}
+          >
+            Ders slaytı
+          </button>
           <button
             type="button"
             className="btn ghost"

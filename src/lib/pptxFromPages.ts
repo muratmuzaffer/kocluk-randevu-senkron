@@ -13,14 +13,6 @@ import contentUrl from '../assets/matkeys/content.jpg'
 const W = 20
 const H = 11.25
 
-const KIND_HEADER: Record<DeckSlide['kind'], string> = {
-  kapak: '',
-  hazir: 'HAZIR MIYIZ?',
-  basla: 'BAŞLAYALIM',
-  giris: '',
-  soru: 'ÖLÇME VE DEĞERLENDİRME SORULARI',
-}
-
 async function urlToData(url: string): Promise<string> {
   const res = await fetch(url)
   const blob = await res.blob()
@@ -42,32 +34,8 @@ export function unitTitle(deck: Deck) {
   return raw
 }
 
-export function headerTitle(deck: Deck, slide: DeckSlide) {
-  return KIND_HEADER[slide.kind] || slide.heading || unitTitle(deck)
-}
-
-function addBullets(slide: PptxGenJS.Slide, bullets: string[]) {
-  slide.addText(
-    bullets.map((bit) => ({
-      text: bit,
-      options: {
-        bullet: true,
-        breakLine: true,
-        fontFace: 'Calibri',
-        fontSize: bit.length > 110 ? 20 : 24,
-        bold: false,
-        color: '1A1A1A',
-      },
-    })),
-    {
-      x: 0.55,
-      y: 1.15,
-      w: 18.9,
-      h: 8.85,
-      valign: 'top',
-      paraSpaceAfter: 10,
-    },
-  )
+export function headerTitle(_deck: Deck, slide: DeckSlide) {
+  return slide.heading
 }
 
 function fileName(deck: Deck) {
@@ -82,7 +50,7 @@ function addBackground(slide: PptxGenJS.Slide, data: string) {
 }
 
 function addSectionTitle(slide: PptxGenJS.Slide, title: string) {
-  const size = title.length > 42 ? 28 : title.length > 28 ? 36 : title.length > 16 ? 48 : 56
+  const size = title.length > 28 ? 36 : title.length > 16 ? 48 : 56
   slide.addText(title, {
     x: 8.2,
     y: 4.55,
@@ -99,7 +67,7 @@ function addSectionTitle(slide: PptxGenJS.Slide, title: string) {
 }
 
 function addHeaderLabel(slide: PptxGenJS.Slide, title: string) {
-  const size = title.length > 42 ? 22 : title.length > 28 ? 28 : 32
+  const size = title.length > 28 ? 26 : 32
   slide.addText(title, {
     x: 0,
     y: 0.12,
@@ -122,14 +90,23 @@ export function previewLength(deck: Deck) {
 export function previewAt(deck: Deck, index: number) {
   const last = previewLength(deck) - 1
   if (index <= 0) return { role: 'cover' as const, label: 'MatKeys kapak' }
-  if (index === 1) return { role: 'title' as const, label: 'Başlık' }
-  if (index >= last) return { role: 'end' as const, label: 'Kapanış' }
+  if (index === 1) return { role: 'title' as const, label: 'Başlık', heading: unitTitle(deck) }
+  if (index >= last) return { role: 'end' as const, label: 'Kapanış', heading: unitTitle(deck) }
   const slide = deck.slides[index - 2]
-  if (!slide) return { role: 'end' as const, label: 'Kapanış' }
+  if (!slide) return { role: 'end' as const, label: 'Kapanış', heading: unitTitle(deck) }
+  if (slide.face === 'title') {
+    return {
+      role: 'section' as const,
+      slide,
+      label: slide.heading,
+      heading: slide.heading,
+    }
+  }
   return {
     role: 'content' as const,
     slide,
     label: slide.label,
+    heading: slide.heading,
   }
 }
 
@@ -162,11 +139,12 @@ export async function downloadUnitPptx(
   for (let i = 0; i < deck.slides.length; i++) {
     const item = deck.slides[i]
     const slide = pres.addSlide()
-    addBackground(slide, contentBg)
-    addHeaderLabel(slide, headerTitle(deck, item))
-    if (item.mode === 'text' && item.bullets.length) {
-      addBullets(slide, item.bullets)
+    if (item.face === 'title') {
+      addBackground(slide, titleBg)
+      addSectionTitle(slide, item.heading)
     } else {
+      addBackground(slide, contentBg)
+      addHeaderLabel(slide, headerTitle(deck, item))
       const data = await renderPageDataUrl(pdf, item.page, 2.35, true)
       slide.addImage({
         data,

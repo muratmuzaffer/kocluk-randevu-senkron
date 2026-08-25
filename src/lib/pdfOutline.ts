@@ -1,6 +1,6 @@
 export type PageKind = 'kapak' | 'hazir' | 'basla' | 'giris' | 'soru'
 
-export type SlideMode = 'text' | 'page'
+export type SlideFace = 'title' | 'page'
 
 export type Unit = {
   id: string
@@ -15,8 +15,7 @@ export type DeckSlide = {
   page: number
   label: string
   heading: string
-  bullets: string[]
-  mode: SlideMode
+  face: SlideFace
 }
 
 export type Deck = {
@@ -25,43 +24,43 @@ export type Deck = {
 }
 
 export const CANONICAL_TITLES: Record<number, string> = {
-  4: 'SAYILAR VE NİCELİKLER (2): KESİRLER',
-  5: 'İSTATİSTİKSEL ARAŞTIRMA SÜRECİ',
-  6: 'İŞLEMLERLE CEBİRSEL DÜŞÜNME',
-  7: 'VERİDEN OLASILIĞA',
+  4: 'KESİRLER',
+  5: 'İSTATİSTİKSEL ARAŞTIRMA',
+  6: 'CEBİRSEL DÜŞÜNME',
+  7: 'OLASILIK',
 }
 
 const KIND_LABEL: Record<PageKind, string> = {
   kapak: 'Kapak',
   hazir: 'Hazır mıyız?',
   basla: 'Başlayalım',
-  giris: 'Konuya giriş',
+  giris: 'Konu',
   soru: 'Sorular',
 }
 
-const TOPIC_NEEDLES: { needle: string; key: string; title: string }[] = [
-  { needle: 'ESITLIGIN KORUNUMU', key: 'esitlik', title: 'EŞİTLİĞİN KORUNUMU VE İŞLEM ÖZELLİKLERİ' },
-  { needle: 'ISLEM ONCELIGI', key: 'oncelik', title: 'İŞLEM ÖNCELİĞİ' },
-  { needle: 'SAYI VE SEKIL', key: 'oruntu', title: 'SAYI VE ŞEKİL ÖRÜNTÜLERİ' },
-  { needle: 'SEKIL ORUNTU', key: 'oruntu', title: 'SAYI VE ŞEKİL ÖRÜNTÜLERİ' },
-  { needle: 'TEME ARITMETIK', key: 'algoritma', title: 'TEMEL ARİTMETİK İŞLEMLER VE ALGORİTMA' },
-  { needle: 'ALGORITMA', key: 'algoritma', title: 'TEMEL ARİTMETİK İŞLEMLER VE ALGORİTMA' },
-  { needle: 'OLASILIK SPEKTRUMU', key: 'spektrum', title: 'OLASILIK SPEKTRUMU' },
-  { needle: 'KESIN OLAY', key: 'kesin', title: 'KESİN VE İMKANSIZ OLAYLAR' },
-  { needle: 'IMKANSIZ OLAY', key: 'kesin', title: 'KESİN VE İMKANSIZ OLAYLAR' },
-  { needle: 'OLASILIK', key: 'olasilik', title: 'OLASILIK' },
-  { needle: 'VERI GORSELLESTIRME', key: 'gorsel', title: 'VERİ GÖRSELLEŞTİRME ARAÇLARI' },
-  { needle: 'SUTUN GRAFIGI', key: 'sutun', title: 'SÜTUN GRAFİĞİ' },
-  { needle: 'DAIRE GRAFIGI', key: 'daire', title: 'DAİRE GRAFİĞİ' },
-  { needle: 'NOKTA GRAFIGI', key: 'nokta', title: 'NOKTA GRAFİĞİ' },
-  { needle: 'ISTATISTIK OKURYAZAR', key: 'okuryazar', title: 'İSTATİSTİK OKURYAZARLIĞI' },
-  { needle: 'DEGISEBILIR', key: 'degis', title: 'VERİLERİN DEĞİŞEBİLİRLİĞİ' },
-  { needle: 'ISTATISTIKSEL ARASTIRMA', key: 'arastirma', title: 'İSTATİSTİKSEL ARAŞTIRMA SÜRECİ' },
-  { needle: 'DENK KESIR', key: 'denk', title: 'DENK KESİRLER' },
-  { needle: 'KESIRLERDE TOPLAMA', key: 'ktoplama', title: 'KESİRLERDE TOPLAMA' },
-  { needle: 'KESIRLERDE CIKARMA', key: 'kcikarma', title: 'KESİRLERDE ÇIKARMA' },
-  { needle: 'KESIRLERDE CARPMA', key: 'kcarpma', title: 'KESİRLERDE ÇARPMA' },
-  { needle: 'PAYDA ESITLEME', key: 'payda', title: 'PAYDA EŞİTLEME' },
+const TOPICS: { needle: string; title: string }[] = [
+  { needle: 'ESITLIGIN KORUNUMU', title: 'EŞİTLİĞİN KORUNUMU' },
+  { needle: 'ISLEM ONCELIGI', title: 'İŞLEM ÖNCELİĞİ' },
+  { needle: 'SAYI VE SEKIL', title: 'SAYI VE ŞEKİL ÖRÜNTÜLERİ' },
+  { needle: 'SEKIL ORUNTU', title: 'SAYI VE ŞEKİL ÖRÜNTÜLERİ' },
+  { needle: 'TEME ARITMETIK', title: 'ALGORİTMA' },
+  { needle: 'ALGORITMA', title: 'ALGORİTMA' },
+  { needle: 'OLASILIK SPEKTRUMU', title: 'OLASILIK SPEKTRUMU' },
+  { needle: 'KESIN OLAY', title: 'KESİN OLAY' },
+  { needle: 'IMKANSIZ OLAY', title: 'İMKANSIZ OLAY' },
+  { needle: 'VERI GORSELLESTIRME', title: 'VERİ GÖRSELLEŞTİRME' },
+  { needle: 'SUTUN GRAFIGI', title: 'SÜTUN GRAFİĞİ' },
+  { needle: 'DAIRE GRAFIGI', title: 'DAİRE GRAFİĞİ' },
+  { needle: 'NOKTA GRAFIGI', title: 'NOKTA GRAFİĞİ' },
+  { needle: 'ISTATISTIK OKURYAZAR', title: 'İSTATİSTİK OKURYAZARLIĞI' },
+  { needle: 'DEGISEBILIR', title: 'VERİLERİN DEĞİŞEBİLİRLİĞİ' },
+  { needle: 'ISTATISTIKSEL ARASTIRMA', title: 'İSTATİSTİKSEL ARAŞTIRMA' },
+  { needle: 'ALISTIRMA SORULARI', title: 'ALIŞTIRMA SORULARI' },
+  { needle: 'DENK KESIR', title: 'DENK KESİRLER' },
+  { needle: 'KESIRLERDE TOPLAMA', title: 'KESİRLERDE TOPLAMA' },
+  { needle: 'KESIRLERDE CIKARMA', title: 'KESİRLERDE ÇIKARMA' },
+  { needle: 'KESIRLERDE CARPMA', title: 'KESİRLERDE ÇARPMA' },
+  { needle: 'PAYDA ESITLEME', title: 'PAYDA EŞİTLEME' },
 ]
 
 function norm(text: string) {
@@ -172,77 +171,6 @@ function scoreTitle(title: string) {
   return words + upper + (title.length > 18 ? 3 : 0)
 }
 
-export function stripJunk(text: string) {
-  return text
-    .replace(/KAREKODU[\s\S]{0,90}?(ULAŞABİLİRSİNİZ|ULASABILIRSINIZ)\.?/gi, ' ')
-    .replace(/KAREKODU OKUTARAK TEMA/gi, ' ')
-    .replace(/BU TEMADA[\s\S]{0,240}?beklenmektedir\.?/gi, ' ')
-    .replace(/ANAHTAR KAVRAM(LAR)?[\s\S]{0,120}?/gi, ' ')
-    .replace(/\d+\s*\.\s*TEMA/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function usefulBit(raw: string) {
-  const s = raw.replace(/\s+/g, ' ').trim()
-  if (s.length < 18 || s.length > 220) return ''
-  if (isJunkTitle(s)) return ''
-  const t = fold(s)
-  if (t.includes('KAREKODU') || t.includes('OZET ICERIGE')) return ''
-  if (t.includes('BEKLENMEKTEDIR')) return ''
-  const letters = (s.match(/[A-Za-zÇĞİÖŞÜçğıöşü]/g) || []).length
-  if (letters < 12) return ''
-  const digits = (s.match(/\d/g) || []).length
-  if (digits > s.length * 0.35) return ''
-  return s.replace(/^[a-zA-ZçğıöşüÇĞİÖŞÜ]\)\s*/, '').replace(/^\d+[.)]\s*/, '')
-}
-
-export function bulletsFrom(text: string, max = 5): string[] {
-  const t = stripJunk(text)
-  const seen = new Set<string>()
-  const out: string[] = []
-  const push = (raw: string) => {
-    const bit = usefulBit(raw)
-    if (!bit) return
-    const key = fold(bit).slice(0, 48)
-    if (seen.has(key)) return
-    seen.add(key)
-    out.push(bit)
-  }
-
-  for (const m of t.matchAll(/(?:^|[^\d])\d{1,2}[).]\s+(.{18,180}?)(?=(?:\s+\d{1,2}[).]\s+)|$)/g)) {
-    push(m[1])
-    if (out.length >= max) return out
-  }
-  if (out.length >= 2) return out.slice(0, max)
-
-  for (const m of t.matchAll(/\b[a-dA-D]\)\s+(.{18,180}?)(?=(?:\s+[a-dA-D]\)\s+)|$)/g)) {
-    push(m[1])
-    if (out.length >= max) return out
-  }
-  if (out.length >= 2) return out.slice(0, max)
-
-  for (const part of t.split(/(?<=[.!?])\s+/)) {
-    push(part)
-    if (out.length >= max) return out
-  }
-  if (out.length < 2) {
-    const words = t.split(' ').filter(Boolean)
-    let buf: string[] = []
-    for (const w of words) {
-      buf.push(w)
-      const s = buf.join(' ')
-      if (s.length >= 88) {
-        push(s)
-        buf = []
-        if (out.length >= max) return out
-      }
-    }
-    if (buf.length) push(buf.join(' '))
-  }
-  return out.slice(0, max)
-}
-
 export function titleFrom(text: string, number: number) {
   const candidates: string[] = []
   const afterRe = new RegExp(
@@ -272,44 +200,24 @@ export function polishTitle(number: number, extracted: string) {
   return clean
 }
 
-function topicOf(text: string) {
+function topicTitle(text: string): string {
   const t = fold(text)
-  if (t.includes('OLCME VE DEGERLENDIRME')) return { key: 'olcme', title: 'ÖLÇME VE DEĞERLENDİRME SORULARI' }
-  if (t.includes('HAZIR MIYIZ')) return { key: 'hazir', title: 'HAZIR MIYIZ?' }
-  if (t.includes('BASLAYALIM')) return { key: 'basla', title: 'BAŞLAYALIM' }
-  for (const item of TOPIC_NEEDLES) {
-    if (t.includes(item.needle)) return { key: item.key, title: item.title }
+  for (const item of TOPICS) {
+    if (t.includes(item.needle)) return item.title
   }
-  return { key: 'body', title: '' }
+  return ''
 }
 
-function makeSlide(
-  kind: PageKind,
-  page: number,
-  heading: string,
-  texts: string[],
-): DeckSlide {
-  const bullets = bulletsFrom(texts.join(' '), kind === 'soru' ? 4 : 5)
-  return {
-    kind,
-    page,
-    label: KIND_LABEL[kind],
-    heading,
-    bullets,
-    mode: bullets.length >= 2 ? 'text' : 'page',
+function classify(text: string, fallback: string): { kind: PageKind; heading: string } {
+  const kind = rawKind(text)
+  if (kind === 'olcme') {
+    return { kind: 'soru', heading: 'ÖLÇME VE DEĞERLENDİRME' }
   }
-}
-
-function pickEvery<T>(items: T[], max: number) {
-  if (items.length <= max) return items
-  if (max === 1) return [items[0]]
-  const out: T[] = []
-  for (let i = 0; i < max; i++) {
-    const idx = Math.round((i * (items.length - 1)) / (max - 1))
-    const item = items[idx]
-    if (!out.includes(item)) out.push(item)
-  }
-  return out
+  if (kind === 'hazir') return { kind: 'hazir', heading: 'HAZIR MIYIZ?' }
+  if (kind === 'basla') return { kind: 'basla', heading: 'BAŞLAYALIM' }
+  const heading = topicTitle(text)
+  if (heading) return { kind: 'giris', heading }
+  return { kind: 'giris', heading: fallback }
 }
 
 export function findUnits(pages: string[]): Unit[] {
@@ -344,112 +252,55 @@ export function findUnits(pages: string[]): Unit[] {
 }
 
 export function blendDeck(unit: Unit, pages: string[]): Deck {
-  const nums: number[] = []
-  for (let p = unit.start; p <= unit.end; p++) nums.push(p)
-
-  const hazir: number[] = []
-  const basla: number[] = []
-  const topics = new Map<string, { title: string; pages: number[] }>()
-  const soruPages: number[] = []
+  const slides: DeckSlide[] = []
+  let heading = unit.title
+  let kind: PageKind = 'giris'
   let olcmeStarted = false
 
-  for (const page of nums) {
+  const pushTitle = (nextKind: PageKind, nextHeading: string) => {
+    slides.push({
+      kind: nextKind,
+      page: 0,
+      label: nextHeading,
+      heading: nextHeading,
+      face: 'title',
+    })
+  }
+
+  for (let page = unit.start; page <= unit.end; page++) {
     const text = pages[page - 1] || ''
-    const kind = rawKind(text)
-    if (kind === 'olcme') olcmeStarted = true
-    if (olcmeStarted) {
-      if (!isJunkPage(text)) soruPages.push(page)
-      continue
-    }
     if (isJunkPage(text)) continue
-    if (kind === 'hazir') {
-      if (hazir.length === 0) hazir.push(page)
-      continue
+    const raw = rawKind(text)
+    if (raw === 'olcme') olcmeStarted = true
+    const next = olcmeStarted
+      ? { kind: 'soru' as const, heading: 'ÖLÇME VE DEĞERLENDİRME' }
+      : classify(text, heading)
+    if (next.heading !== heading || slides.length === 0) {
+      heading = next.heading
+      kind = next.kind
+      if (heading !== unit.title) pushTitle(kind, heading)
     }
-    if (kind === 'basla') {
-      if (basla.length === 0) basla.push(page)
-      continue
-    }
-    const topic = topicOf(text)
-    if (topic.key === 'body') continue
-    const prev = topics.get(topic.key)
-    if (prev) {
-      if (prev.pages.length < 3) prev.pages.push(page)
-      continue
-    }
-    topics.set(topic.key, { title: topic.title, pages: [page] })
-  }
-
-  let topicEntries = [...topics.entries()]
-  if (topicEntries.length === 0) {
-    const extras = nums.filter((p) => {
-      const text = pages[p - 1] || ''
-      return !isJunkPage(text) && rawKind(text) === 'other' && !soruPages.includes(p)
+    slides.push({
+      kind,
+      page,
+      label: KIND_LABEL[kind],
+      heading,
+      face: 'page',
     })
-    const picked = extras.filter((_, i) => i === 0 || (i + 1) % 4 === 0).slice(0, 5)
-    topicEntries = picked.map((page, i) => [
-      `body-${i}`,
-      {
-        title: unit.title,
-        pages: [page],
-      },
-    ])
-  }
-
-  const slides: DeckSlide[] = []
-  const headingOf = (kind: PageKind, fallback: string) => {
-    if (kind === 'hazir') return 'HAZIR MIYIZ?'
-    if (kind === 'basla') return 'BAŞLAYALIM'
-    if (kind === 'soru') return 'ÖLÇME VE DEĞERLENDİRME SORULARI'
-    return fallback || unit.title
-  }
-
-  for (const page of hazir) {
-    slides.push(
-      makeSlide('hazir', page, headingOf('hazir', ''), [pages[page - 1] || '']),
-    )
-  }
-  for (const page of basla) {
-    slides.push(
-      makeSlide('basla', page, headingOf('basla', ''), [pages[page - 1] || '']),
-    )
-  }
-
-  for (const [, topic] of topicEntries.slice(0, 6)) {
-    const texts = topic.pages.map((p) => pages[p - 1] || '')
-    slides.push(makeSlide('giris', topic.pages[0], headingOf('giris', topic.title), texts))
-  }
-
-  const questionBits = bulletsFrom(
-    soruPages.map((p) => pages[p - 1] || '').join(' '),
-    8,
-  )
-  if (questionBits.length >= 2) {
-    const chunks = [questionBits.slice(0, 4), questionBits.slice(4, 8)].filter(
-      (c) => c.length > 0,
-    )
-    chunks.forEach((bits, i) => {
-      slides.push({
-        kind: 'soru',
-        page: soruPages[Math.min(i, soruPages.length - 1)] || unit.start,
-        label: KIND_LABEL.soru,
-        heading: headingOf('soru', ''),
-        bullets: bits,
-        mode: 'text',
-      })
-    })
-  } else {
-    for (const page of pickEvery(soruPages, 3)) {
-      slides.push(makeSlide('soru', page, headingOf('soru', ''), [pages[page - 1] || '']))
-    }
   }
 
   if (slides.length === 0) {
-    const fallback = nums.find((p) => !isJunkPage(pages[p - 1] || ''))
+    const fallback = [...Array(unit.end - unit.start + 1)].map((_, i) => unit.start + i)
+      .find((p) => !isJunkPage(pages[p - 1] || ''))
     if (fallback) {
-      slides.push(
-        makeSlide('giris', fallback, unit.title, [pages[fallback - 1] || '']),
-      )
+      pushTitle('giris', unit.title)
+      slides.push({
+        kind: 'giris',
+        page: fallback,
+        label: KIND_LABEL.giris,
+        heading: unit.title,
+        face: 'page',
+      })
     }
   }
 
@@ -464,6 +315,8 @@ export function kindCounts(deck: Deck) {
     giris: 0,
     soru: 0,
   }
-  for (const s of deck.slides) counts[s.kind]++
+  for (const s of deck.slides) {
+    if (s.face === 'page') counts[s.kind]++
+  }
   return counts
 }

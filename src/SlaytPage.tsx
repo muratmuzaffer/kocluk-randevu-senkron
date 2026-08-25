@@ -45,7 +45,12 @@ export default function SlaytPage({ active }: Props) {
   const total = deck ? previewLength(deck) : 0
   const view = deck ? previewAt(deck, index) : null
   const current = view?.role === 'content' ? view.slide : null
-  const heading = deck ? unitTitle(deck) : ''
+  const heading =
+    view && 'heading' in view && view.heading
+      ? view.heading
+      : deck
+        ? unitTitle(deck)
+        : ''
 
   useEffect(() => {
     if (!deck || !active) return
@@ -59,7 +64,7 @@ export default function SlaytPage({ active }: Props) {
   }, [deck, active])
 
   useEffect(() => {
-    if (!deck || !current || !pdfRef.current || current.mode === 'text') {
+    if (!deck || !current || !pdfRef.current) {
       setPreview('')
       return
     }
@@ -139,9 +144,9 @@ export default function SlaytPage({ active }: Props) {
   return (
     <div className="slayt-pane">
       <p className="slayt-lead">
-        Kitap PDF’ini yükleyin, üniteyi seçin. Saçma cümleler ayıklanır, ünite
-        harmanlanır. Önizleme MatKeys formatındadır: kapak, başlık, içerik,
-        kapanış.
+        Kitap PDF’ini yükleyin, üniteyi seçin. Görseller kitaptan gelir; yalnızca
+        konu başlıkları kısa tutulur. Her kitap sayfası ayrı slayttır. MatKeys:
+        kapak, başlık, içerik, kapanış.
       </p>
 
       <section className="files-panel slayt-files">
@@ -217,7 +222,7 @@ export default function SlaytPage({ active }: Props) {
             </button>
             <p>
               {index + 1} / {total} · {view.label}
-              {current?.heading ? ` · ${current.heading}` : ''}
+              {current ? ` · s. ${current.page}` : ''}
             </p>
             <button
               type="button"
@@ -240,7 +245,7 @@ export default function SlaytPage({ active }: Props) {
             {view.role === 'cover' ? (
               <img className="mk-bg" src={coverUrl} alt="MatKeys kapak" />
             ) : null}
-            {view.role === 'title' || view.role === 'end' ? (
+            {view.role === 'title' || view.role === 'end' || view.role === 'section' ? (
               <>
                 <img className="mk-bg" src={titleUrl} alt="" />
                 <p className="mk-title">{heading}</p>
@@ -250,13 +255,7 @@ export default function SlaytPage({ active }: Props) {
               <>
                 <img className="mk-bg" src={contentUrl} alt="" />
                 <p className="mk-head">{headerTitle(deck, current)}</p>
-                {current.mode === 'text' && current.bullets.length ? (
-                  <ul className="mk-body">
-                    {current.bullets.map((bit) => (
-                      <li key={bit}>{bit}</li>
-                    ))}
-                  </ul>
-                ) : preview ? (
+                {preview ? (
                   <img
                     className="mk-page"
                     src={preview}
@@ -273,8 +272,8 @@ export default function SlaytPage({ active }: Props) {
         <section className="empty-home">
           <h2>Ünite slaytı yok</h2>
           <p>
-            PDF yükleyip üniteyi seçin. Harmanlanmış MatKeys slaytını burada
-            görün; beğenirseniz PowerPoint indirin.
+            PDF yükleyip üniteyi seçin. 5. temadaki MatKeys slaytlarıyla aynı
+            düzende, kitaptan görselleri burada görün; beğenirseniz indirin.
           </p>
         </section>
       )}

@@ -1,4 +1,4 @@
-import { blendDeck, bulletsFrom, findUnits } from '../src/lib/pdfOutline.ts'
+import { blendDeck, findUnits } from '../src/lib/pdfOutline.ts'
 
 function assert(cond: unknown, msg: string) {
   if (!cond) throw new Error(msg)
@@ -15,17 +15,17 @@ pages[55] =
 pages[113] =
   '1. Adım 2. Adım 6.TEMA İŞLEMLERLE CEBİRSEL DÜŞÜNME • Eşitliğin Korunumu Bu temada çıkarım yapabilmeniz beklenmektedir.'
 pages[115] =
-  '1) Toplama ve çarpma işleminin sonucunu bulunuz. 2) Verilmeyen terimi yazınız. HAZIR MIYIZ A) Aşağıdaki işlemlerde verilmeyenleri bulunuz.'
-pages[116] = 'BAŞLAYALIM 1) Aşağıdaki soruları cevaplayınız. 2) Sonucu kontrol ediniz.'
+  '1) Toplama ve çarpma işleminin sonucunu bulunuz. HAZIR MIYIZ A) Aşağıdaki işlemlerde verilmeyenleri bulunuz.'
+pages[116] = 'BAŞLAYALIM 1) Aşağıdaki soruları cevaplayınız.'
 pages[117] =
-  'İŞLEMLERLE CEBİRSEL DÜŞÜNME 118 EŞİTLİĞİN KORUNUMU VE İŞLEM ÖZELLİKLERİ Halat çekmede iki taraf da aynı kuvveti uygular. Eşitliğin iki yanına aynı işlem uygulanırsa eşitlik korunur.'
-pages[130] = '6.TEMA 131 İŞLEM ÖNCELİĞİ Sezen kare şeklindeki kağıdı dört parçaya böler. Önce çarpma sonra toplama yapılır.'
-pages[138] = '6.TEMA 139 SAYI VE ŞEKİL ÖRÜNTÜLERİ Ertuğrul örüntünün kuralını bulur. Her adımda iki kare artar.'
-pages[149] = 'TEMEL ARİTMETİK İŞLEMLER VE ALGORİTMA Ayşe ayran tarifini adım adım yazar. Algoritma sıralı işlem basamaklarıdır.'
+  'İŞLEMLERLE CEBİRSEL DÜŞÜNME 118 EŞİTLİĞİN KORUNUMU VE İŞLEM ÖZELLİKLERİ Halat çekmede iki taraf da aynı kuvveti uygular.'
+pages[118] = 'EŞİTLİĞİN KORUNUMU terazinin kefeleri eşit kalır.'
+pages[130] = '6.TEMA 131 İŞLEM ÖNCELİĞİ Sezen kare şeklindeki kağıdı dört parçaya böler.'
+pages[138] = '6.TEMA 139 SAYI VE ŞEKİL ÖRÜNTÜLERİ Ertuğrul örüntünün kuralını bulur.'
+pages[149] = 'TEMEL ARİTMETİK İŞLEMLER VE ALGORİTMA Ayşe ayran tarifini adım adım yazar.'
 pages[159] =
-  'İŞLEMLERLE CEBİRSEL DÜŞÜNME 160 ÖLÇME VE DEĞERLENDİRME SORULARI 1) Remzi eşitliği korumak için hangi işlemi yapmalıdır? 2) İşlem önceliğine göre sonucu bulunuz.'
-pages[160] = '6.TEMA 161 a) Oğuz daireleri boyarken hangi kuralı kullanır? b) Örüntünün 5. adımını çiziniz.'
-pages[161] = 'İŞLEMLERLE CEBİRSEL DÜŞÜNME 162 a) Mavi daire sayısı nedir? b) Algoritmanın 3. basamağını yazınız.'
+  'İŞLEMLERLE CEBİRSEL DÜŞÜNME 160 ÖLÇME VE DEĞERLENDİRME SORULARI 1) Remzi eşitliği korumak için hangi işlemi yapmalıdır?'
+pages[160] = '6.TEMA 161 a) Oğuz daireleri boyarken hangi kuralı kullanır?'
 pages[163] =
   'Çok 2 1 asla mümkün büyük VERİDEN OLASILIĞA 7. TEMA Karekodu okutarak özet içeriğe ulaşabilirsiniz.'
 
@@ -40,50 +40,41 @@ assert(five?.start === 56, `5 start ${five?.start}`)
 assert(seven?.start === 164, `7 start ${seven?.start}`)
 assert(!/karekodu/i.test(four?.title || ''), `4 title ${four?.title}`)
 assert(!/karekodu/i.test(seven?.title || ''), `7 title ${seven?.title}`)
-assert(/olasılığa|OLASILIĞA/i.test(seven?.title || ''), `7 title ${seven?.title}`)
-assert(/istatistik|İSTATİSTİK/i.test(five?.title || ''), `5 title ${five?.title}`)
-assert(!/sayfa/i.test(five?.title || ''), `5 extra ${five?.title}`)
-assert(/cebirsel|CEBİRSEL/i.test(six?.title || ''), `6 title ${six?.title}`)
-assert(!/kazanç|sayısı 0/i.test(five?.title || ''), `5 junk ${five?.title}`)
-
-const bits = bulletsFrom(
-  'Karekodu okutarak özet içeriğe ulaşabilirsiniz. Eşitliğin iki yanına aynı işlem uygulanırsa eşitlik korunur. Halat çekmede kuvvetler dengededir.',
-)
-assert(bits.length >= 1, 'bullets')
-assert(
-  bits.every((b) => !/karekodu/i.test(b)),
-  `junk bullet ${bits.join(' | ')}`,
-)
+assert(four?.title === 'KESİRLER', `4 short ${four?.title}`)
+assert(five?.title === 'İSTATİSTİKSEL ARAŞTIRMA', `5 short ${five?.title}`)
+assert(six?.title === 'CEBİRSEL DÜŞÜNME', `6 short ${six?.title}`)
+assert(seven?.title === 'OLASILIK', `7 short ${seven?.title}`)
 
 const deck = blendDeck(six!, pages)
+const pagesIn = deck.slides.filter((s) => s.face === 'page').map((s) => s.page)
+assert(pagesIn.includes(116), 'hazir 116')
+assert(pagesIn.includes(117), 'basla 117')
+assert(pagesIn.includes(118), 'esitlik 118')
+assert(pagesIn.includes(119), 'esitlik continues 119')
+assert(pagesIn.includes(131), 'oncelik 131')
+assert(pagesIn.includes(160), 'soru 160')
+assert(pagesIn.includes(161), 'soru 161')
+assert(!pagesIn.includes(114), 'skip opener junk')
 assert(
-  deck.slides.some((s) => s.kind === 'hazir' && s.page === 116),
-  'hazir 116',
+  deck.slides.some((s) => s.face === 'title' && s.heading === 'HAZIR MIYIZ?'),
+  'short hazir title',
 )
 assert(
-  deck.slides.some((s) => s.kind === 'basla' && s.page === 117),
-  'basla 117',
+  deck.slides.some((s) => s.face === 'title' && s.heading === 'EŞİTLİĞİN KORUNUMU'),
+  'short esitlik title',
 )
 assert(
-  !deck.slides.some((s) => s.page === 114),
-  'skip opener junk',
+  deck.slides.every((s) => !/karekodu/i.test(s.heading)),
+  'no junk heading',
 )
 assert(
-  deck.slides.some((s) => s.kind === 'giris' && s.page === 118),
-  'esitlik',
+  deck.slides.filter((s) => s.face === 'page').length >= 8,
+  `too few pages ${pagesIn.join(',')}`,
 )
-assert(
-  deck.slides.filter((s) => s.kind === 'soru').length <= 3,
-  `too many soru ${deck.slides.filter((s) => s.kind === 'soru').length}`,
-)
-assert(
-  deck.slides.some((s) => s.kind === 'soru'),
-  'need soru',
-)
-assert(
-  deck.slides.every((s) => s.bullets.every((b) => !/karekodu/i.test(b))),
-  'deck junk',
-)
-assert(deck.slides.length < 16, `too many ${deck.slides.length}`)
 console.log('ok', units.map((u) => `${u.number}:${u.start}-${u.end}:${u.title}`).join(' | '))
-console.log(deck.slides.map((s) => `${s.page}:${s.kind}:${s.mode}`).join(','))
+console.log(
+  deck.slides
+    .filter((s) => s.face === 'title' || [116, 117, 118, 131, 139, 150, 160].includes(s.page))
+    .map((s) => (s.face === 'title' ? `T:${s.heading}` : `${s.page}:${s.kind}`))
+    .join(' | '),
+)

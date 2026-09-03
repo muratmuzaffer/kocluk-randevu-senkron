@@ -15,7 +15,7 @@
 
 .app-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 0.45rem;
   margin-bottom: 1rem;
 }
@@ -39,6 +39,52 @@
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+.home-tools {
+  margin-bottom: 1rem;
+}
+
+.home-tool {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--grid);
+  border-radius: 12px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-tool:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.home-tool strong,
+.home-tool em,
+.home-tool b {
+  display: block;
+}
+
+.home-tool strong {
+  font-size: 1.05rem;
+}
+
+.home-tool em {
+  margin-top: 0.2rem;
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.home-tool b {
+  color: var(--accent);
+  font-size: 1rem;
 }
 
 .pane-off {

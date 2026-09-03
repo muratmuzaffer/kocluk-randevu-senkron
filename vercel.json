@@ -1,7 +1,7 @@
 {
   "rewrites": [
     { "source": "/slayt", "destination": "/index.html" },
-    { "source": "/kitap-slayt", "destination": "/index.html" }
+    { "source": "/kitap-slayt", "destination": "/kitap/index.html" }
   ],
   "headers": [
     {

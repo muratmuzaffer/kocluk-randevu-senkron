@@ -30,15 +30,11 @@ import {
 import './App.css'
 
 const SlaytPage = lazy(() => import('./SlaytPage.tsx'))
-const KitapSlaytPage = lazy(() => import('./KitapSlaytPage.tsx'))
 
-type PageId = 'randevu' | 'slayt' | 'kitap'
+type PageId = 'randevu' | 'slayt'
 
 function pageFromPath(): PageId {
-  const path = pathOf()
-  if (path.startsWith('/kitap-slayt')) return 'kitap'
-  if (path.startsWith('/slayt')) return 'slayt'
-  return 'randevu'
+  return pathOf().startsWith('/slayt') ? 'slayt' : 'randevu'
 }
 
 type SlotItem = {
@@ -65,7 +61,6 @@ function App() {
   const [flash, setFlash] = useState('')
   const [page, setPage] = useState<PageId>(pageFromPath)
   const [slaytSeen, setSlaytSeen] = useState(() => pageFromPath() === 'slayt')
-  const [kitapSeen, setKitapSeen] = useState(() => pageFromPath() === 'kitap')
 
   useEffect(() => {
     const onPop = () => setPage(pageFromPath())
@@ -75,12 +70,15 @@ function App() {
 
   useEffect(() => {
     if (page === 'slayt') setSlaytSeen(true)
-    if (page === 'kitap') setKitapSeen(true)
   }, [page])
 
   function openPage(next: PageId) {
     setPage(next)
-    go(next === 'slayt' ? '/slayt' : next === 'kitap' ? '/kitap-slayt' : '/')
+    go(next === 'slayt' ? '/slayt' : '/')
+  }
+
+  function openKitapSlayt() {
+    window.location.href = '/kitap-slayt'
   }
 
   useEffect(() => {
@@ -273,13 +271,7 @@ function App() {
       <header className="home-bar">
         <div className="home-brand">
           <p className="brand">Tarık Can Erdoğan</p>
-          <h1>
-            {page === 'kitap'
-              ? 'Kitap slayt'
-              : page === 'slayt'
-                ? 'Ders slaytı'
-                : 'Randevu tahtam'}
-          </h1>
+          <h1>{page === 'slayt' ? 'Ders slaytı' : 'Randevu tahtam'}</h1>
         </div>
         <div className="home-actions">
           {page === 'randevu' && savedLabel ? (
@@ -328,22 +320,17 @@ function App() {
         >
           Ders slaytı
         </button>
-        <button
-          type="button"
-          className={page === 'kitap' ? 'on' : ''}
-          aria-current={page === 'kitap' ? 'page' : undefined}
-          onClick={() => openPage('kitap')}
-        >
+        <button type="button" onClick={openKitapSlayt}>
           Kitap slayt
         </button>
       </nav>
 
       {page === 'randevu' ? (
         <section className="home-tools">
-          <button type="button" className="home-tool" onClick={() => openPage('kitap')}>
+          <button type="button" className="home-tool" onClick={openKitapSlayt}>
             <span>
               <strong>Kitap slayt</strong>
-              <em>PDF yükle, ünite kapağı ve konu başlıklarıyla MatKeys slayt indir</em>
+              <em>Gemini destekli PDF analizi · ünite kapağı ve konu başlıklarıyla MatKeys slayt</em>
             </span>
             <b>Aç →</b>
           </button>
@@ -568,13 +555,6 @@ function App() {
         </div>
       ) : null}
 
-      {kitapSeen ? (
-        <div className={page === 'kitap' ? '' : 'pane-off'}>
-          <Suspense fallback={<p className="slayt-boot">Kitap slayt yükleniyor…</p>}>
-            <KitapSlaytPage active={page === 'kitap'} />
-          </Suspense>
-        </div>
-      ) : null}
     </div>
   )
 }

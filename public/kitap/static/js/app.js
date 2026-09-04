@@ -71,45 +71,25 @@
     return ["konu", heading(text, unitTitle)];
   }
 
-  function isTocPage(text) {
-    const t = fold(text);
-    if (t.includes("ICINDEKILER") || t.includes("KITABIMIZI TANIYALIM")) return true;
-    const dots = (text.match(/\./g) || []).length;
-    const leaders = (text.match(/\.\./g) || []).length;
-    if (dots > 80 && leaders > 12) return true;
-    return ([...text.matchAll(/\d+\s*\.\s*TEMA/gi)].length >= 2);
-  }
-
   function findUnits(pages) {
-    const unitLine = /^(\d+)\s*\.\s*TEMA\b(?:\s*[:\-–]?\s*(.*))?$/i;
-    const seen = new Set();
-    const starts = [];
-    for (const page of pages) {
-      if (isTocPage(page.text)) continue;
-      let found = null;
-      let extra = "";
-      for (const raw of page.text.split(/\n+/)) {
-        const line = raw.replace(/\s+/g, " ").trim();
-        const match = line.match(unitLine);
-        if (!match) continue;
-        found = Number(match[1]);
-        extra = (match[2] || "").replace(/^[:.\-\s]+/, "").trim();
-        break;
+    const best = new Map();
+    pages.forEach((page, i) => {
+      const t = fold(page.text);
+      if (t.includes("ICINDEKILER") || t.includes("KITABIMIZI TANIYALIM")) return;
+      for (const match of t.matchAll(/(\d+)\s*\.\s*TEMA/g)) {
+        const no = Number(match[1]);
+        if (best.has(no)) continue;
+        const after = (page.text.match(new RegExp(String(no) + "\\s*\\.\\s*TEMA\\s*[:.]?\\s*([^\\d]{4,80})", "i")) || [])[1] || "";
+        const title = after.replace(/\s+/g, " ").trim().slice(0, 55) || `${no}. tema`;
+        best.set(no, { no, title, start: i + 1 });
       }
-      if (found == null || seen.has(found) || found < 1 || found > 20) continue;
-      seen.add(found);
-      starts.push({
-        no: found,
-        title: extra.length >= 8 ? extra.slice(0, 70) : `${found}. Tema`,
-        start: page.no,
-      });
-    }
-    starts.sort((a, b) => a.start - b.start || a.no - b.no);
-    return starts.map((hit, i) => ({
+    });
+    const hits = [...best.values()].sort((a, b) => a.start - b.start || a.no - b.no);
+    return hits.map((hit, i) => ({
       no: hit.no,
       title: hit.title,
       start: hit.start,
-      end: i + 1 < starts.length ? starts[i + 1].start - 1 : pages.length,
+      end: i + 1 < hits.length ? hits[i + 1].start - 1 : pages.length,
     }));
   }
 
@@ -519,10 +499,7 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Gemini analizi başarısız");
-      const titled = new Map((data.units || []).map((u) => [Number(u.no), u.title]));
-      const units = localUnits
-        .map((unit) => ({ ...unit, title: titled.get(unit.no) || unit.title }))
-        .sort((a, b) => a.no - b.no);
+      const units = data.units?.length ? data.units : localUnits;
       if (!units.length) throw new Error("Ünite başlığı bulunamadı. PDF içinde “4. TEMA” benzeri başlık olmalı.");
       state.analysis = {
         kitap_adi: data.kitap_adi || file.name.replace(/\.pdf$/i, ""),

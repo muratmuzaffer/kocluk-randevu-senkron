@@ -1,8 +1,5 @@
 {
-  "rewrites": [
-    { "source": "/slayt", "destination": "/index.html" },
-    { "source": "/kitap-slayt", "destination": "/index.html" }
-  ],
+  "rewrites": [{ "source": "/slayt", "destination": "/index.html" }],
   "headers": [
     {
       "source": "/index.html",
@@ -14,10 +11,6 @@
     },
     {
       "source": "/slayt",
-      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
-    },
-    {
-      "source": "/kitap-slayt",
       "headers": [{ "key": "Cache-Control", "value": "no-store" }]
     }
   ]
